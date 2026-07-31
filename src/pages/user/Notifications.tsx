@@ -4,30 +4,12 @@ import { useNotificationStore } from '../../store/notificationStore';
 import { supabase } from '../../lib/supabase';
 import { Bell, CheckCircle, Trash2, CheckCheck } from 'lucide-react';
 
-const mockNotifications = [
-  {
-    id: 'm1',
-    title: '¡Te damos la bienvenida a Legacy Academy! 🚀',
-    message: 'Explora nuestros cursos premium de marketing digital, desarrollo personal, criptomonedas y negocios.',
-    created_at: new Date().toISOString(),
-    is_read: false
-  },
-  {
-    id: 'm2',
-    title: 'Plan de Estudio Activado 📚',
-    message: 'Organiza tus cursos de interés, ponte metas diarias y programa recordatorios para ser disciplinado.',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    is_read: true
-  }
-];
-
 export function Notifications() {
   const { user } = useAuthStore();
   const { decrementUnread, resetUnread } = useNotificationStore();
   
-  // Sincronización instantánea en segundo plano (0ms de espera)
-  const [notifications, setNotifications] = useState<any[]>(mockNotifications);
-  const [loading] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -43,19 +25,13 @@ export function Notifications() {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500));
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
-        if (!error && data && data.length > 0) {
-          // Fusionar las reales de la BD con las de bienvenida
-          const merged = [...data];
-          mockNotifications.forEach(m => {
-            if (!merged.find(x => String(x.id) === String(m.id))) {
-              merged.push(m);
-            }
-          });
-          setNotifications(merged);
+        if (!error && data) {
+          setNotifications(data);
         }
       } catch (err) {
-        // En caso de lentitud, el usuario sigue viendo sus notificaciones locales al instante
-        console.warn('Sincronización de notificaciones en segundo plano pausada o en timeout.');
+        console.warn('Sincronización de notificaciones pausada o en timeout.', err);
+      } finally {
+        setLoading(false);
       }
     }
     fetchNotifications();
@@ -64,12 +40,10 @@ export function Notifications() {
   const markAsRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     decrementUnread();
-    if (!id.startsWith('m')) {
-      try {
-        await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-      } catch (err) {
-        console.warn('Error al actualizar lectura en base de datos:', err);
-      }
+    
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    if (error) {
+      console.warn('Error al actualizar lectura en base de datos:', error);
     }
   };
 
@@ -77,27 +51,25 @@ export function Notifications() {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     resetUnread();
     if (user) {
-      try {
-        await supabase
-          .from('notifications')
-          .update({ is_read: true })
-          .or(`user_id.eq.${user.id},user_id.is.null`)
-          .eq('is_read', false);
-      } catch (err) {
-        console.error('Error marking all as read:', err);
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .or(`user_id.eq.${user.id},user_id.is.null`)
+        .eq('is_read', false);
+      if (error) {
+        console.error('Error marking all as read:', error);
       }
     }
   };
 
   const clearAll = async () => {
-    const idsToDelete = notifications.filter(n => !n.id.startsWith('m')).map(n => n.id);
+    const idsToDelete = notifications.map(n => n.id);
     setNotifications([]);
     resetUnread();
     if (idsToDelete.length > 0) {
-      try {
-        await supabase.from('notifications').delete().in('id', idsToDelete);
-      } catch (err) {
-        console.error('Error clearing notifications:', err);
+      const { error } = await supabase.from('notifications').delete().in('id', idsToDelete);
+      if (error) {
+        console.error('Error clearing notifications:', error);
       }
     }
   };
