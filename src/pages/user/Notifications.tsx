@@ -66,7 +66,6 @@ export function Notifications() {
   };
 
   const clearAll = async () => {
-    const idsToDelete = notifications.map(n => n.id);
     
     // Identificar notificaciones globales para borrarlas localmente
     const globalIds = notifications.filter(n => n.user_id === null).map(n => n.id);
