@@ -21,7 +21,11 @@ export function Login() {
     });
 
     if (signInError) {
-      setError(signInError.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : signInError.message);
+      let errorMessage = signInError.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : signInError.message;
+      if (signInError.message === 'Failed to fetch') {
+        errorMessage = `Error de red. Verifica tu conexión a internet o la configuración del servidor. (URL: ${supabase.supabaseUrl})`;
+      }
+      setError(errorMessage);
       setLoading(false);
     } else {
       // The authStore listener in App.tsx will handle the redirect, but we can force it here
