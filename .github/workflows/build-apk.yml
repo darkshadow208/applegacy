@@ -45,9 +45,17 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Cache Android debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore
+
       - name: Build Android APK
         run: |
           cd android
+          # Incrementar versionCode automaticamente usando el numero de ejecucion de GitHub
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/g" app/build.gradle
           chmod +x gradlew
           ./gradlew assembleDebug
 
