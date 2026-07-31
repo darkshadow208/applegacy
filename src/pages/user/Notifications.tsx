@@ -26,7 +26,10 @@ export function Notifications() {
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
         if (!error && data) {
-          setNotifications(data);
+          const deletedGlobal = JSON.parse(localStorage.getItem('deleted_global_notifs') || '[]');
+          // Filter out global notifications that the user has cleared locally
+          const filteredData = data.filter((n: any) => !(n.user_id === null && deletedGlobal.includes(n.id)));
+          setNotifications(filteredData);
         }
       } catch (err) {
         console.warn('Sincronización de notificaciones pausada o en timeout.', err);
@@ -64,6 +67,14 @@ export function Notifications() {
 
   const clearAll = async () => {
     const idsToDelete = notifications.map(n => n.id);
+    
+    // Identificar notificaciones globales para borrarlas localmente
+    const globalIds = notifications.filter(n => n.user_id === null).map(n => n.id);
+    if (globalIds.length > 0) {
+      const deletedGlobal = JSON.parse(localStorage.getItem('deleted_global_notifs') || '[]');
+      localStorage.setItem('deleted_global_notifs', JSON.stringify([...deletedGlobal, ...globalIds]));
+    }
+
     setNotifications([]);
     resetUnread();
     if (idsToDelete.length > 0) {
