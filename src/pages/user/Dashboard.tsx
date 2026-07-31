@@ -76,12 +76,35 @@ export function Dashboard() {
           if (subError) throw subError;
 
           if (subData) {
-            setSubStatus(subData.status);
             if (subData.end_date) {
               const diffTime = new Date(subData.end_date).getTime() - new Date().getTime();
               const calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              setDaysLeft(calculatedDays > 0 ? calculatedDays : 0);
+              
+              const isExpired = calculatedDays <= 0;
+              setDaysLeft(isExpired ? 0 : calculatedDays);
+              setSubStatus(isExpired && subData.status === 'active' ? 'expired' : subData.status);
+
+              // 1. Aviso de 3 días (Solo avisar una vez al día por usuario)
+              if (!isExpired && calculatedDays <= 3 && subData.status === 'active') {
+                const today = new Date().toISOString().split('T')[0];
+                const warnedKey = `warned_sub_exp_${profile.id}`;
+                if (localStorage.getItem(warnedKey) !== today) {
+                  localStorage.setItem(warnedKey, today);
+                  supabase.from('notifications').insert({
+                    user_id: profile.id,
+                    title: '⚠️ Suscripción por Expirar',
+                    message: `Tu membresía termina en ${calculatedDays} día(s). Renueva pronto para no perder el acceso a la academia.`,
+                    is_read: false
+                  }).then(({ error }) => {
+                     if (!error && typeof (window as any).decrementUnread !== 'undefined') {
+                       // Opcionalmente forzar actualización de UI (store) si fuera necesario
+                     }
+                  });
+                }
+              }
+
             } else {
+              setSubStatus(subData.status);
               setDaysLeft(null);
             }
           }

@@ -313,6 +313,15 @@ export function AdminDashboard() {
         .eq('user_id', userId);
 
       if (error) throw error;
+
+      // Enviar notificación al usuario sobre el cambio de fechas
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: '📅 Actualización de Membresía',
+        message: `Las fechas de tu membresía han sido actualizadas. Nueva fecha de vencimiento: ${new Date(endDateISO).toLocaleDateString()}`,
+        is_read: false
+      });
+
       showToast('📅 Fechas de membresía actualizadas con éxito.');
     } catch (err: any) {
       console.error(err);
@@ -593,6 +602,15 @@ export function AdminDashboard() {
 
       if (data) {
         setBonusesList([data, ...bonusesList]);
+        
+        // Notificación global de nuevo bono
+        await supabase.from('notifications').insert({
+          user_id: null,
+          title: '🎁 ¡Nuevo Bono VIP!',
+          message: `Hemos añadido un nuevo recurso a la bóveda: "${newBonusObj.title}". ¡Disfrútalo!`,
+          is_read: false
+        });
+
         showToast('🎁 ¡Bono publicado en el catálogo!');
         setBonusTitle('');
         setBonusDesc('');

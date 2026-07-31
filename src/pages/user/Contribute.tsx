@@ -119,6 +119,22 @@ export function Contribute() {
       const result = await Promise.race([insertPromise, timeoutPromise]) as any;
 
       if (result && result.error) throw result.error;
+      
+      // Notificar al administrador
+      try {
+        const { data: adminData } = await supabase.from('users_profiles').select('id').eq('role', 'admin').limit(1).single();
+        if (adminData) {
+          await supabase.from('notifications').insert({
+            user_id: adminData.id,
+            title: '📝 Nuevo Aporte Pendiente',
+            message: `${profile?.full_name || 'Un usuario'} ha enviado un nuevo recurso: "${title}". Revísalo en el panel de administrador.`,
+            is_read: false
+          });
+        }
+      } catch (adminNotifErr) {
+        console.warn('No se pudo notificar al admin', adminNotifErr);
+      }
+
       setSuccess(true);
     } catch (err: any) {
       console.warn('Fallo al guardar aporte real en DB, simulando éxito para pruebas locales:', err);

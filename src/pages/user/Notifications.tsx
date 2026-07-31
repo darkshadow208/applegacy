@@ -77,8 +77,9 @@ export function Notifications() {
 
     setNotifications([]);
     resetUnread();
-    if (idsToDelete.length > 0) {
-      const { error } = await supabase.from('notifications').delete().in('id', idsToDelete);
+    const personalIdsToDelete = notifications.filter(n => n.user_id !== null).map(n => n.id);
+    if (personalIdsToDelete.length > 0) {
+      const { error } = await supabase.from('notifications').delete().in('id', personalIdsToDelete);
       if (error) {
         console.error('Error clearing notifications:', error);
       }
