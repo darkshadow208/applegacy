@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "463663292293",
+    "project_id": "legacyacademyt",
+    "storage_bucket": "legacyacademyt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:463663292293:android:4ac057b37fa8560edd2eec",
+        "android_client_info": {
+          "package_name": "com.legacyacademy.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_WYPcBx91ysyPo8qk9TuQkCXj3peznOA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:463663292293:android:f7aab8465f419905dd2eec",
+        "android_client_info": {
+          "package_name": "legacy.academy28_"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_WYPcBx91ysyPo8qk9TuQkCXj3peznOA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

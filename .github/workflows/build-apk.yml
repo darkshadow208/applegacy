@@ -34,6 +34,7 @@ jobs:
           npm install @capacitor/android
           npx cap add android || true
           npx cap sync
+          node scripts/setup-firebase.js
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4

@@ -159,10 +159,10 @@ export function Dashboard() {
             <h3 className="text-xl font-bold text-gray-900 capitalize">
               {subStatus === 'active' ? 'Activa' : subStatus === 'pending' ? 'Pendiente' : 'Expirada'}
             </h3>
-            <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+             <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
                <Calendar size={14} /> 
                {daysLeft !== null 
-                 ? `Vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}` 
+                 ? (daysLeft > 0 ? `Vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}` : 'Ya expirada')
                  : 'En espera de aprobación'}
             </p>
           </div>

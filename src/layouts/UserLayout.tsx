@@ -1,9 +1,11 @@
 import { Outlet, NavLink, Link } from 'react-router-dom';
 import { Home, BookOpen, Users, Bell, User } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { useNotificationStore } from '../store/notificationStore';
 
 export function UserLayout() {
   const { profile } = useAuthStore();
+  const { unreadCount } = useNotificationStore();
 
   return (
     <div className="h-screen max-h-screen bg-[#f0f4f8] text-[#1e293b] font-sans relative overflow-hidden flex flex-col items-center justify-between">
@@ -48,7 +50,17 @@ export function UserLayout() {
             <Users size={24} />
           </NavLink>
           
-          <NavItem to="/notifications" icon={<Bell size={22} />} />
+          
+          <NavItem to="/notifications" icon={
+            <div className="relative">
+              <Bell size={22} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border-2 border-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
+          } />
           <NavItem to="/profile" icon={<User size={22} />} />
         </nav>
       </div>

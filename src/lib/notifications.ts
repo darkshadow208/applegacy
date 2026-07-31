@@ -1,4 +1,5 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from './supabase';
 
 export const notificationService = {
@@ -9,6 +10,50 @@ export const notificationService = {
     } catch (err) {
       console.warn('LocalNotifications requesting permissions not supported in this environment:', err);
       return false;
+    }
+  },
+
+  async registerPushNotifications(userId: string) {
+    try {
+      let permStatus = await PushNotifications.checkPermissions();
+      if (permStatus.receive === 'prompt') {
+        permStatus = await PushNotifications.requestPermissions();
+      }
+
+      if (permStatus.receive !== 'granted') {
+        throw new Error('Push permissions not granted');
+      }
+
+      // Registers with Apple/Google
+      await PushNotifications.register();
+
+      // Listen for registration success
+      PushNotifications.addListener('registration', async (token) => {
+        console.log('Push registration success, token:', token.value);
+        // Save the FCM token to Supabase
+        await supabase
+          .from('users_profiles')
+          .update({ fcm_token: token.value })
+          .eq('id', userId);
+      });
+
+      // Listen for registration error
+      PushNotifications.addListener('registrationError', (error: any) => {
+        console.error('Push registration error:', error);
+      });
+
+      // Listen for push notifications received
+      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('Push received: ', notification);
+      });
+
+      // Listen for push notification click
+      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+        console.log('Push action performed: ', notification);
+      });
+
+    } catch (err) {
+      console.warn('PushNotifications not supported in this environment:', err);
     }
   },
 

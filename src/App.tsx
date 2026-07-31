@@ -23,6 +23,7 @@ import { Blog } from './pages/user/Blog';
 import { useAuthStore } from './store/authStore';
 import { notificationService } from './lib/notifications';
 import { supabase } from './lib/supabase';
+import { useNotificationStore } from './store/notificationStore';
 import logoImg from './assets/logo.png';
 
 // Route protector wrapper
@@ -87,47 +88,13 @@ function App() {
       // 1. Check expiration notifications
       notificationService.checkAndScheduleExpirationNotifications(session.user.id, profile.role);
 
-      // 2. Fetch unread notifications from DB and show them as local notifications if they haven't been notified yet
-      const syncDbNotificationsToMobile = async () => {
-        try {
-          const { data: unreadNotifications, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .or(`user_id.eq.${session.user.id},user_id.is.null`)
-            .eq('is_read', false);
+      // Register Push Notifications
+      notificationService.registerPushNotifications(session.user.id);
 
-          if (error) throw error;
+      // Fetch initial unread count
+      useNotificationStore.getState().fetchUnreadCount(session.user.id);
 
-          if (unreadNotifications && unreadNotifications.length > 0) {
-            const notifiedIdsKey = `notified_notification_ids_${session.user.id}`;
-            const notifiedIdsSaved = localStorage.getItem(notifiedIdsKey) || '[]';
-            const notifiedIds: string[] = JSON.parse(notifiedIdsSaved);
-            const newNotifiedIds = [...notifiedIds];
-            let changed = false;
-
-            for (const notif of unreadNotifications) {
-              if (!notifiedIds.includes(notif.id)) {
-                // Schedule local notification immediately on the phone
-                await notificationService.schedule(
-                  notif.title, 
-                  notif.message, 
-                  new Date(notif.created_at).getTime() % 1000000
-                );
-                newNotifiedIds.push(notif.id);
-                changed = true;
-              }
-            }
-
-            if (changed) {
-              localStorage.setItem(notifiedIdsKey, JSON.stringify(newNotifiedIds));
-            }
-          }
-        } catch (err) {
-          console.error('Error syncing db notifications to mobile:', err);
-        }
-      };
-
-      syncDbNotificationsToMobile();
+      // 2. We no longer sync all unread db notifications on startup to avoid spamming the user.
 
       // 3. Realtime subscription for new notifications
       const channel = supabase
@@ -154,6 +121,9 @@ function App() {
                 // Add to notified local storage
                 notifiedIds.push(newNotif.id);
                 localStorage.setItem(notifiedIdsKey, JSON.stringify(notifiedIds));
+                
+                // Increment unread count in store
+                useNotificationStore.setState((state) => ({ unreadCount: state.unreadCount + 1 }));
               }
             }
           }

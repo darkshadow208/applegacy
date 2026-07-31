@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { supabase } from '../../lib/supabase';
-import { Bell, CheckCircle } from 'lucide-react';
+import { Bell, CheckCircle, Trash2, CheckCheck } from 'lucide-react';
 
 const mockNotifications = [
   {
@@ -22,6 +23,7 @@ const mockNotifications = [
 
 export function Notifications() {
   const { user } = useAuthStore();
+  const { decrementUnread, resetUnread } = useNotificationStore();
   
   // Sincronización instantánea en segundo plano (0ms de espera)
   const [notifications, setNotifications] = useState<any[]>(mockNotifications);
@@ -61,6 +63,7 @@ export function Notifications() {
 
   const markAsRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    decrementUnread();
     if (!id.startsWith('m')) {
       try {
         await supabase.from('notifications').update({ is_read: true }).eq('id', id);
@@ -70,13 +73,60 @@ export function Notifications() {
     }
   };
 
+  const markAllAsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    resetUnread();
+    if (user) {
+      try {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .or(`user_id.eq.${user.id},user_id.is.null`)
+          .eq('is_read', false);
+      } catch (err) {
+        console.error('Error marking all as read:', err);
+      }
+    }
+  };
+
+  const clearAll = async () => {
+    const idsToDelete = notifications.filter(n => !n.id.startsWith('m')).map(n => n.id);
+    setNotifications([]);
+    resetUnread();
+    if (idsToDelete.length > 0) {
+      try {
+        await supabase.from('notifications').delete().in('id', idsToDelete);
+      } catch (err) {
+        console.error('Error clearing notifications:', err);
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in pb-20">
       
       {/* Header */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Notificaciones</h2>
-        <p className="text-gray-500 text-sm">Tus alertas y recordatorios.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Notificaciones</h2>
+          <p className="text-gray-500 text-sm">Tus alertas y recordatorios.</p>
+        </div>
+        {notifications.length > 0 && (
+          <div className="flex gap-2">
+            <button 
+              onClick={markAllAsRead}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-semibold hover:bg-blue-100 transition-colors"
+            >
+              <CheckCheck size={14} /> Leídas
+            </button>
+            <button 
+              onClick={clearAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-full text-xs font-semibold hover:bg-red-100 transition-colors"
+            >
+              <Trash2 size={14} /> Limpiar
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
