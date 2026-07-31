@@ -23,7 +23,7 @@ export function Login() {
     if (signInError) {
       let errorMessage = signInError.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : signInError.message;
       if (signInError.message === 'Failed to fetch') {
-        errorMessage = `Error de red. Verifica tu conexión a internet o la configuración del servidor. (URL: ${supabase.supabaseUrl})`;
+        errorMessage = `Error de red. Verifica tu conexión a internet o la configuración del servidor. (URL: ${import.meta.env.VITE_SUPABASE_URL || 'No configurada'})`;
       }
       setError(errorMessage);
       setLoading(false);
