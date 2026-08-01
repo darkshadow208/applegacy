@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthLayout } from './layouts/AuthLayout';
 import { UserLayout } from './layouts/UserLayout';
 import { AdminLayout } from './layouts/AdminLayout';
@@ -82,6 +83,12 @@ function App() {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (!useAuthStore.getState().loading) {
+      SplashScreen.hide().catch(() => {});
+    }
+  }, [useAuthStore.getState().loading]);
 
   useEffect(() => {
     if (session?.user && profile) {
