@@ -9,6 +9,11 @@ export const notificationService = {
       return display === 'granted';
     } catch (err) {
       console.warn('LocalNotifications requesting permissions not supported in this environment:', err);
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') return true;
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      }
       return false;
     }
   },
@@ -88,6 +93,42 @@ export const notificationService = {
     try {
       const hasPermission = await this.requestPermissions();
       if (!hasPermission) return;
+
+      // Web Fallback for Desktop Notifications
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if ((window as any).webReminderInterval) clearInterval((window as any).webReminderInterval);
+        
+        if (times.length > 0) {
+          (window as any).webReminderInterval = setInterval(() => {
+            const now = new Date();
+            const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            
+            const lastNotified = localStorage.getItem('last_study_reminder');
+            if (times.includes(currentTime) && lastNotified !== currentTime) {
+               localStorage.setItem('last_study_reminder', currentTime);
+               if (Notification.permission === 'granted') {
+                 new Notification('📚 ¡Hora de Estudiar!', {
+                   body: 'Es momento de avanzar en tus metas del plan de estudio. ¡Tu disciplina creará tu éxito! 🚀'
+                 });
+                 // Audio beep
+                 try {
+                   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                   const osc = ctx.createOscillator();
+                   const gain = ctx.createGain();
+                   osc.connect(gain);
+                   gain.connect(ctx.destination);
+                   osc.type = 'sine';
+                   osc.frequency.setValueAtTime(880, ctx.currentTime);
+                   gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                   osc.start(ctx.currentTime);
+                   osc.stop(ctx.currentTime + 0.5);
+                 } catch(e) {}
+               }
+            }
+          }, 15000); // Check every 15 seconds
+        }
+      }
 
       const pending = await LocalNotifications.getPending();
       const studyReminders = pending.notifications.filter(n => n.id >= 2000 && n.id <= 2999);
