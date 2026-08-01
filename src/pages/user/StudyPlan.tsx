@@ -10,38 +10,15 @@ import {
 import { notificationService } from '../../lib/notifications';
 import { useStudyPlan } from '../../hooks/useStudyPlan';
 
-interface CourseConfig {
-  status: 'pending' | 'progress' | 'completed';
-  priority: 'high' | 'medium' | 'low';
-}
 
-interface SubTask {
-  id: string;
-  text: string;
-  completed: boolean;
-}
 
-interface Goal {
-  id: string;
-  text: string;
-  period: 'weekly' | 'monthly';
-  completed: boolean;
-  subtasks?: SubTask[];
-}
 
-interface Task {
-  id: string;
-  text: string;
-  completed: boolean;
-}
 
-interface Habit {
-  id: string;
-  name: string;
-  streak: number;
-  completed_today: boolean;
-  lastCompletedDate?: string;
-}
+
+
+
+
+
 
 const localMocks = [
   { id: '1', title: 'Masterclass en Estrategia Digital', description: 'Aprende a crear embudos.', image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800', course_categories: { name: 'Marketing Digital' } },
@@ -69,9 +46,7 @@ export function StudyPlan() {
     tasks, setTasks,
     habits, setHabits,
     profile: studyProfile, setProfile: setStudyProfile,
-    courseConfigs, setCourseConfigs,
-    loading: loadingPlan
-  } = useStudyPlan(user?.id);
+    courseConfigs, setCourseConfigs} = useStudyPlan(user?.id);
 
   const dailyTime = studyProfile?.daily_time_goal || 45;
   const setDailyTime = (val: number) => setStudyProfile({...studyProfile, daily_time_goal: val});
@@ -255,7 +230,7 @@ export function StudyPlan() {
   const handleToggleSubTask = (goalId: string, subTaskId: string) => {
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = ((g as any).subtasks || []).map(s => s.id === subTaskId ? { ...s, completed: !s.completed } : s);
+        const subtasks = ((g as any).subtasks || []).map((s: any) => s.id === subTaskId ? { ...s, completed: !s.completed } : s);
         return { ...g, subtasks };
       }
       return g;
@@ -267,7 +242,7 @@ export function StudyPlan() {
   const handleDeleteSubTask = (goalId: string, subTaskId: string) => {
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = ((g as any).subtasks || []).filter(s => s.id !== subTaskId);
+        const subtasks = ((g as any).subtasks || []).filter((s: any) => s.id !== subTaskId);
         return { ...g, subtasks };
       }
       return g;
@@ -317,7 +292,7 @@ export function StudyPlan() {
     const completed_today = !habit.completed_today && !habit.completed_today; // Handle both camelCase and snake_case from DB
     const newStreak = completed_today ? (habit.streak || 0) + 1 : Math.max(0, (habit.streak || 0) - 1);
     
-    setHabits(habits.map(h => h.id === id ? { ...h, completed_today: completed_today, completed_today, streak: newStreak, last_completed_date: completed_today ? today : h.last_completed_date } : h));
+    setHabits(habits.map(h => h.id === id ? { ...h, completed_today, streak: newStreak, last_completed_date: completed_today ? today : h.last_completed_date } : h));
     
     await supabase.from('study_habits').update({ completed_today: completed_today, streak: newStreak, last_completed_date: completed_today ? today : habit.last_completed_date }).eq('id', id);
     if (completed_today) awardXP(50);
@@ -714,7 +689,7 @@ export function StudyPlan() {
             <div className="flex flex-col gap-3 mt-2">
               {goals.map(g => {
                 const subtasks = (g as any).subtasks || [];
-                const completedSubCount = subtasks.filter(s => s.completed).length;
+                const completedSubCount = subtasks.filter((s: any) => s.completed).length;
                 const totalSubCount = subtasks.length;
                 
                 return (
@@ -752,7 +727,7 @@ export function StudyPlan() {
                       )}
 
                       {/* Lista de Subtareas */}
-                      {subtasks.map(s => (
+                      {subtasks.map((s: any) => (
                         <div key={s.id} className="flex items-center justify-between gap-2.5">
                           <div className="flex items-center gap-2 min-w-0">
                             <button onClick={() => handleToggleSubTask(g.id, s.id)} className="text-gray-400 hover:text-blue-500 shrink-0">
@@ -914,7 +889,7 @@ export function StudyPlan() {
                     onClick={() => {
                       let updated;
                       if (isSelected) {
-                        updated = schedule.filter(s => s !== slot);
+                        updated = schedule.filter((s: any) => s !== slot);
                       } else {
                         updated = [...schedule, slot];
                       }
