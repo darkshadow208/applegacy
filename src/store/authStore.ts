@@ -69,8 +69,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.warn('Supabase auth signOut failed, clearing local session:', err);
     } finally {
       set({ session: null, user: null, profile: null });
-      sessionStorage.clear();
-      localStorage.clear(); // Garantizar que el token de supabase se purgue
     }
   }
 }));

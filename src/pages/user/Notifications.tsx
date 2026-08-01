@@ -26,7 +26,8 @@ export function Notifications() {
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
         if (!error && data) {
-          const deletedGlobal = JSON.parse(localStorage.getItem('deleted_global_notifs') || '[]');
+          const cacheKey = `deleted_global_notifs_${user.id}`;
+          const deletedGlobal = JSON.parse(localStorage.getItem(cacheKey) || '[]');
           // Filter out global notifications that the user has cleared locally
           const filteredData = data.filter((n: any) => !(n.user_id === null && deletedGlobal.includes(n.id)));
           setNotifications(filteredData);
@@ -69,9 +70,10 @@ export function Notifications() {
     
     // Identificar notificaciones globales para borrarlas localmente
     const globalIds = notifications.filter(n => n.user_id === null).map(n => n.id);
-    if (globalIds.length > 0) {
-      const deletedGlobal = JSON.parse(localStorage.getItem('deleted_global_notifs') || '[]');
-      localStorage.setItem('deleted_global_notifs', JSON.stringify([...deletedGlobal, ...globalIds]));
+    if (globalIds.length > 0 && user) {
+      const cacheKey = `deleted_global_notifs_${user.id}`;
+      const deletedGlobal = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+      localStorage.setItem(cacheKey, JSON.stringify([...deletedGlobal, ...globalIds]));
     }
 
     setNotifications([]);

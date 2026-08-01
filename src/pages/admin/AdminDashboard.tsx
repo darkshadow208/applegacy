@@ -322,6 +322,18 @@ export function AdminDashboard() {
         is_read: false
       });
 
+      // Si le faltan 3 días o menos, enviarle la alerta de expiración de inmediato
+      const diffTime = new Date(endDateISO).getTime() - new Date().getTime();
+      const calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (calculatedDays > 0 && calculatedDays <= 3) {
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          title: '⚠️ Suscripción por Expirar',
+          message: `Tu membresía termina en ${calculatedDays} día(s). Renueva pronto para no perder el acceso a la academia.`,
+          is_read: false
+        });
+      }
+
       showToast('📅 Fechas de membresía actualizadas con éxito.');
     } catch (err: any) {
       console.error(err);
