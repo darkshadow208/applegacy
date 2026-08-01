@@ -191,6 +191,10 @@ export const notificationService = {
       }
     } else {
       // 2. Fetch current student's subscription
+      // Use a lock to prevent strict mode from running this twice concurrently
+      if ((window as any)._hasCheckedExpirations) return;
+      (window as any)._hasCheckedExpirations = true;
+      
       try {
         const { data: subscription, error } = await supabase
           .from('subscriptions')
@@ -210,39 +214,38 @@ export const notificationService = {
         await this.clearAll();
 
         const endDate = new Date(subscription.end_date);
+        const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-        // Schedule 3 days before
-        const threeDaysBefore = new Date(endDate);
-        threeDaysBefore.setDate(threeDaysBefore.getDate() - 3);
-        if (threeDaysBefore > now) {
+        if (daysLeft > 3) {
+          // Schedule 3 days before
+          const threeDaysBefore = new Date(endDate);
+          threeDaysBefore.setDate(threeDaysBefore.getDate() - 3);
           await this.schedule(
             'Tu membresía va a expirar',
             'Faltan 3 días para el vencimiento de tu plan. Envía tu comprobante para renovar.',
             1001,
             threeDaysBefore
           );
-        } else {
-          // If we are already within the 3 day window, make sure it is in the database notifications
-          await this.insertDbNotificationIfNotExists(
+        } else if (daysLeft > 1 && daysLeft <= 3) {
+           await this.insertDbNotificationIfNotExists(
             userId,
             '⏳ Tu membresía vence pronto',
             'Faltan menos de 3 días para el vencimiento de tu plan. Envía tu comprobante para renovar.'
           );
-        }
-
-        // Schedule 1 day before
-        const oneDayBefore = new Date(endDate);
-        oneDayBefore.setDate(oneDayBefore.getDate() - 1);
-        if (oneDayBefore > now) {
-          await this.schedule(
-            'Membresía por expirar mañana',
-            'Tu acceso premium expira mañana. ¡Sube un nuevo comprobante para continuar!',
-            1002,
-            oneDayBefore
-          );
-        } else {
-          // If we are already within the 1 day window, make sure it is in the database notifications
-          await this.insertDbNotificationIfNotExists(
+          
+          // Schedule 1 day before
+          const oneDayBefore = new Date(endDate);
+          oneDayBefore.setDate(oneDayBefore.getDate() - 1);
+          if (oneDayBefore > now) {
+            await this.schedule(
+              'Membresía por expirar mañana',
+              'Tu acceso premium expira mañana. ¡Sube un nuevo comprobante para continuar!',
+              1002,
+              oneDayBefore
+            );
+          }
+        } else if (daysLeft === 1 || daysLeft === 0) {
+           await this.insertDbNotificationIfNotExists(
             userId,
             '🚨 ¡Tu membresía vence mañana!',
             'Tu acceso premium expira mañana. ¡Sube un nuevo comprobante para continuar!'

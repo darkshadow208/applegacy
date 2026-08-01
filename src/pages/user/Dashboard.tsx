@@ -84,24 +84,7 @@ export function Dashboard() {
               setDaysLeft(isExpired ? 0 : calculatedDays);
               setSubStatus(isExpired && subData.status === 'active' ? 'expired' : subData.status);
 
-              // 1. Aviso de 3 días (Solo avisar una vez al día por usuario)
-              if (!isExpired && calculatedDays <= 3 && subData.status === 'active') {
-                const today = new Date().toISOString().split('T')[0];
-                const warnedKey = `warned_sub_exp_${profile.id}`;
-                if (localStorage.getItem(warnedKey) !== today) {
-                  localStorage.setItem(warnedKey, today);
-                  supabase.from('notifications').insert({
-                    user_id: profile.id,
-                    title: '⚠️ Suscripción por Expirar',
-                    message: `Tu membresía termina en ${calculatedDays} día(s). Renueva pronto para no perder el acceso a la academia.`,
-                    is_read: false
-                  }).then(({ error }) => {
-                     if (!error && typeof (window as any).decrementUnread !== 'undefined') {
-                       // Opcionalmente forzar actualización de UI (store) si fuera necesario
-                     }
-                  });
-                }
-              }
+
 
             } else {
               setSubStatus(subData.status);
