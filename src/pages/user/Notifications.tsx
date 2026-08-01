@@ -26,11 +26,20 @@ export function Notifications() {
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
         if (!error && data) {
-          const cacheKey = `deleted_global_notifs_${user.id}`;
-          const deletedGlobal = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+          const cacheKeyDel = `deleted_global_notifs_${user.id}`;
+          const cacheKeyRead = `read_global_notifs_${user.id}`;
+          const deletedGlobal = JSON.parse(localStorage.getItem(cacheKeyDel) || '[]');
+          const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+          
           // Filter out global notifications that the user has cleared locally
           const filteredData = data.filter((n: any) => !(n.user_id === null && deletedGlobal.includes(n.id)));
-          setNotifications(filteredData);
+          
+          // Mark global notifications as read locally
+          const mappedData = filteredData.map((n: any) => 
+            (n.user_id === null && readGlobal.includes(n.id)) ? { ...n, is_read: true } : n
+          );
+          
+          setNotifications(mappedData);
         }
       } catch (err) {
         console.warn('Sincronización de notificaciones pausada o en timeout.', err);
@@ -42,23 +51,42 @@ export function Notifications() {
   }, [user]);
 
   const markAsRead = async (id: string) => {
+    const notif = notifications.find(n => n.id === id);
+    if (notif && notif.user_id === null && user) {
+      const cacheKeyRead = `read_global_notifs_${user.id}`;
+      const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+      if (!readGlobal.includes(id)) {
+        localStorage.setItem(cacheKeyRead, JSON.stringify([...readGlobal, id]));
+      }
+    }
+
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     decrementUnread();
     
-    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    if (error) {
-      console.warn('Error al actualizar lectura en base de datos:', error);
+    if (notif && notif.user_id !== null) {
+      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+      if (error) {
+        console.warn('Error al actualizar lectura en base de datos:', error);
+      }
     }
   };
 
   const markAllAsRead = async () => {
+    const unreadGlobals = notifications.filter(n => n.user_id === null && !n.is_read).map(n => n.id);
+    if (unreadGlobals.length > 0 && user) {
+      const cacheKeyRead = `read_global_notifs_${user.id}`;
+      const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+      const newReads = Array.from(new Set([...readGlobal, ...unreadGlobals]));
+      localStorage.setItem(cacheKeyRead, JSON.stringify(newReads));
+    }
+
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     resetUnread();
     if (user) {
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .or(`user_id.eq.${user.id},user_id.is.null`)
+        .eq('user_id', user.id)
         .eq('is_read', false);
       if (error) {
         console.error('Error marking all as read:', error);
