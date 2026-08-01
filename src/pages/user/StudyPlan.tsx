@@ -79,7 +79,7 @@ export function StudyPlan() {
   const [newGoalPeriod, setNewGoalPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [newTaskText, setNewTaskText] = useState('');
   const [newHabitText, setNewHabitText] = useState('');
-  const reminderTimes = studyProfile?.reminder_times || ['09:00', '18:00'];
+  const reminderTimes: string[] = (studyProfile as any)?.reminder_times || ['09:00', '18:00'];
   const [newReminderTime, setNewReminderTime] = useState('18:00');
   const [selectedCourseToAdd, setSelectedCourseToAdd] = useState('');
 
@@ -335,7 +335,7 @@ export function StudyPlan() {
   };
 
   const handleDeleteReminderTime = async (time: string) => {
-    const updated = reminderTimes.filter(t => t !== time);
+    const updated = reminderTimes.filter((t: string) => t !== time);
     setStudyProfile({...studyProfile, reminder_times: updated} as any);
     if (user) await supabase.from('student_study_profile').update({ reminder_times: updated }).eq('user_id', user.id);
   };
@@ -655,7 +655,7 @@ export function StudyPlan() {
                   {reminderTimes.length === 0 ? (
                     <p className="text-xs text-gray-400 italic">No hay horas programadas. ¡Añade una!</p>
                   ) : (
-                    reminderTimes.map((time) => (
+                    reminderTimes.map((time: string) => (
                       <span key={time} className="flex items-center gap-1.5 text-xs font-bold bg-orange-50 text-orange-700 border border-orange-100 px-3 py-1 rounded-full">
                         {time}
                         <button
