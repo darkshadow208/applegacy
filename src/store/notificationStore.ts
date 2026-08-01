@@ -13,6 +13,7 @@ interface NotificationStore {
 
 export const useNotificationStore = create<NotificationStore>((set) => ({
   unreadCount: 0,
+  subscription: null,
   
   fetchUnreadCount: async (userId: string) => {
     try {
@@ -52,7 +53,7 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
           table: 'notifications',
           filter: `user_id=eq.${userId}` // We can only filter by eq in postgres_changes easily, for global we might need to listen to all or check on client
         },
-        (payload) => {
+        () => {
           set((state) => ({ unreadCount: state.unreadCount + 1 }));
         }
       )
@@ -64,7 +65,7 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
           table: 'notifications',
           filter: `user_id=is.null`
         },
-        (payload) => {
+        () => {
           set((state) => ({ unreadCount: state.unreadCount + 1 }));
         }
       )

@@ -39,6 +39,7 @@ interface Habit {
   name: string;
   streak: number;
   completedToday: boolean;
+  lastCompletedDate?: string;
 }
 
 const localMocks = [
@@ -120,17 +121,20 @@ export function StudyPlan() {
     if (!user) return;
     const storageKey = `study_plan_${user.id}`;
     const saved = localStorage.getItem(storageKey);
+    let loadedHabits: Habit[] = [];
+    
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.courseConfigs) setCourseConfigs(parsed.courseConfigs);
         if (parsed.goals) setGoals(parsed.goals);
         if (parsed.tasks) setTasks(parsed.tasks);
-        if (parsed.habits) setHabits(parsed.habits);
         if (parsed.dailyTime) setDailyTime(parsed.dailyTime);
         if (parsed.schedule) setSchedule(parsed.schedule);
         if (parsed.remindersEnabled !== undefined) setRemindersEnabled(parsed.remindersEnabled);
         if (parsed.reminderTimes) setReminderTimes(parsed.reminderTimes);
+        
+        loadedHabits = parsed.habits || [];
       } catch (e) {
         console.error('Error parsing study plan storage:', e);
       }
@@ -144,10 +148,12 @@ export function StudyPlan() {
         { id: 't1', text: 'Revisar apuntes de Facebook Ads', completed: false },
         { id: 't2', text: 'Ver video introductorio de Cripto', completed: true }
       ]);
-      setHabits([
+      const initialHabits: Habit[] = [
         { id: 'h1', name: 'Estudiar 30 min diarios', streak: 4, completedToday: false },
-        { id: 'h2', name: 'Tomar notas activas', streak: 2, completedToday: true }
-      ]);
+        { id: 'h2', name: 'Tomar notas activas', streak: 2, completedToday: true, lastCompletedDate: new Date().toISOString().split('T')[0] }
+      ];
+      loadedHabits = initialHabits;
+      
       setReminderTimes(['09:00', '18:00']);
       // Configurar Masterclass y Hábitos como en curso por defecto para que no salga vacío
       setCourseConfigs({
@@ -155,6 +161,45 @@ export function StudyPlan() {
         '2': { status: 'pending', priority: 'medium' },
         '3': { status: 'pending', priority: 'medium' }
       });
+    }
+
+    // Process habits for 24h reset
+    const today = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date(Date.now() - 86400000);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
+    
+    let habitsChanged = false;
+    const processedHabits = loadedHabits.map((h: Habit) => {
+      if (!h.lastCompletedDate) return h;
+      
+      // If it's a new day and it was completed previously, reset completedToday
+      if (h.lastCompletedDate !== today && h.completedToday) {
+        habitsChanged = true;
+        // If last completed was older than yesterday, streak is broken
+        const isOlderThanYesterday = h.lastCompletedDate < yesterday;
+        return {
+          ...h,
+          completedToday: false,
+          streak: isOlderThanYesterday ? 0 : h.streak
+        };
+      }
+
+      // If it wasn't completed today, and the last time it was completed was before yesterday, streak is broken
+      if (!h.completedToday && h.lastCompletedDate < yesterday && h.streak > 0) {
+        habitsChanged = true;
+        return { ...h, streak: 0 };
+      }
+
+      return h;
+    });
+
+    setHabits(processedHabits);
+
+    // Initial save if we just created defaults or updated habits
+    if (!saved || habitsChanged) {
+      setTimeout(() => {
+        saveToStorage(undefined, undefined, undefined, processedHabits);
+      }, 500);
     }
   }, [user]);
 
@@ -359,13 +404,15 @@ export function StudyPlan() {
   };
 
   const handleToggleHabit = (id: string) => {
+    const today = new Date().toISOString().split('T')[0];
     const updated = habits.map(h => {
       if (h.id === id) {
         const completedToday = !h.completedToday;
         return {
           ...h,
           completedToday,
-          streak: completedToday ? h.streak + 1 : Math.max(0, h.streak - 1)
+          streak: completedToday ? h.streak + 1 : Math.max(0, h.streak - 1),
+          lastCompletedDate: completedToday ? today : h.lastCompletedDate
         };
       }
       return h;
