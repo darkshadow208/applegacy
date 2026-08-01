@@ -81,6 +81,8 @@ export function StudyPlan() {
   const [newHabitText, setNewHabitText] = useState('');
   const reminderTimes: string[] = (studyProfile as any)?.reminder_times || ['09:00', '18:00'];
   const [newReminderTime, setNewReminderTime] = useState('18:00');
+  const [newScheduleDay, setNewScheduleDay] = useState('Lunes');
+  const [newScheduleTime, setNewScheduleTime] = useState('18:00');
   const [selectedCourseToAdd, setSelectedCourseToAdd] = useState('');
 
   const awardXP = async (amount: number) => {
@@ -222,7 +224,10 @@ export function StudyPlan() {
     const updatedCompleted = !goal.completed;
     setGoals(goals.map(g => g.id === id ? { ...g, completed: updatedCompleted } : g));
     await supabase.from('study_goals').update({ completed: updatedCompleted }).eq('id', id);
-    if (updatedCompleted) awardXP(100);
+    if (updatedCompleted) {
+      awardXP(100);
+      console.log('🎯 ¡Meta lograda! +100 XP');
+    }
   };
 
   const handleDeleteGoal = async (id: string) => {
@@ -287,7 +292,10 @@ export function StudyPlan() {
     const updatedCompleted = !task.completed;
     setTasks(tasks.map(t => t.id === id ? { ...t, completed: updatedCompleted } : t));
     await supabase.from('study_tasks').update({ completed: updatedCompleted }).eq('id', id);
-    if (updatedCompleted) awardXP(10);
+    if (updatedCompleted) {
+      awardXP(10);
+      console.log('✅ Tarea completada +10 XP');
+    }
   };
 
   const handleDeleteTask = async (id: string) => {
@@ -315,7 +323,10 @@ export function StudyPlan() {
     setHabits(habits.map(h => h.id === id ? { ...h, completed_today, streak: newStreak, last_completed_date: completed_today ? today : h.last_completed_date } : h));
     
     await supabase.from('study_habits').update({ completed_today: completed_today, streak: newStreak, last_completed_date: completed_today ? today : habit.last_completed_date }).eq('id', id);
-    if (completed_today) awardXP(50);
+    if (completed_today) {
+      awardXP(50);
+      console.log('🔥 ¡Hábito cumplido! +50 XP y racha mantenida');
+    }
   };
 
   const handleDeleteHabit = async (id: string) => {
@@ -338,6 +349,24 @@ export function StudyPlan() {
     const updated = reminderTimes.filter((t: string) => t !== time);
     setStudyProfile({...studyProfile, reminder_times: updated} as any);
     if (user) await supabase.from('student_study_profile').update({ reminder_times: updated }).eq('user_id', user.id);
+  };
+
+  const handleAddScheduleSlot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const slot = `${newScheduleDay} ${newScheduleTime}`;
+    if (schedule.includes(slot)) {
+      alert('Ya tienes este horario reservado.');
+      return;
+    }
+    const updated = [...schedule, slot];
+    setSchedule(updated);
+    console.log(`Bloque de estudio añadido: ${slot}`);
+  };
+
+  const handleRemoveScheduleSlot = async (slot: string) => {
+    const updated = schedule.filter((s: string) => s !== slot);
+    setSchedule(updated);
+    console.log(`Bloque eliminado: ${slot}`);
   };
 
   // Estadísticas calculadas basadas en cursos DE INTERÉS (tracked)
@@ -897,36 +926,56 @@ export function StudyPlan() {
             </h3>
 
             <p className="text-xs text-gray-500 leading-relaxed">
-              Elige tus bloques fijos para forjar consistencia semanal.
+              Elige tus bloques fijos de estudio para forjar consistencia durante la semana.
             </p>
 
-            <div className="flex flex-col gap-2 mt-1">
-              {['Lunes 18:00', 'Miércoles 20:00', 'Viernes 18:00', 'Sábado 10:00'].map((slot) => {
-                const isSelected = schedule.includes(slot);
-                return (
-                  <button
+            <form onSubmit={handleAddScheduleSlot} className="flex gap-2">
+              <select 
+                value={newScheduleDay} 
+                onChange={(e) => setNewScheduleDay(e.target.value)}
+                className="text-xs bg-gray-50 border border-gray-200 rounded-xl px-2 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              >
+                <option value="Lunes">Lunes</option>
+                <option value="Martes">Martes</option>
+                <option value="Miércoles">Miércoles</option>
+                <option value="Jueves">Jueves</option>
+                <option value="Viernes">Viernes</option>
+                <option value="Sábado">Sábado</option>
+                <option value="Domingo">Domingo</option>
+              </select>
+              <input 
+                type="time" 
+                value={newScheduleTime}
+                onChange={(e) => setNewScheduleTime(e.target.value)}
+                className="flex-1 text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-gray-700"
+              />
+              <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shrink-0 flex items-center gap-1">
+                <Plus size={14} /> Añadir
+              </button>
+            </form>
+
+            <div className="flex flex-col gap-2 mt-2">
+              {schedule.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No has asignado bloques de estudio. ¡Empieza hoy!</p>
+              ) : (
+                schedule.map((slot: string) => (
+                  <div
                     key={slot}
-                    onClick={() => {
-                      let updated;
-                      if (isSelected) {
-                        updated = schedule.filter((s: any) => s !== slot);
-                      } else {
-                        updated = [...schedule, slot];
-                      }
-                      setSchedule(updated);
-                      
-                    }}
-                    className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
-                      isSelected 
-                        ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm' 
-                        : 'border-gray-100 bg-gray-50/50 text-gray-500 hover:bg-white'
-                    }`}
+                    className="flex items-center justify-between p-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 shadow-sm transition-all hover:shadow-md"
                   >
-                    <span>{slot}</span>
-                    <span className="text-[10px] uppercase font-bold tracking-wider">{isSelected ? 'Bloque de estudio' : 'Reservar'}</span>
-                  </button>
-                );
-              })}
+                    <span className="text-xs font-bold">{slot}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] uppercase font-bold tracking-wider">Bloque Reservado</span>
+                      <button
+                        onClick={() => handleRemoveScheduleSlot(slot)}
+                        className="text-purple-400 hover:text-red-500 hover:bg-white p-1 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
