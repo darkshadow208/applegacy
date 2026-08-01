@@ -20,14 +20,7 @@ import { useStudyPlan } from '../../hooks/useStudyPlan';
 
 
 
-const localMocks = [
-  { id: '1', title: 'Masterclass en Estrategia Digital', description: 'Aprende a crear embudos.', image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800', course_categories: { name: 'Marketing Digital' } },
-  { id: '2', title: 'Hábitos de Alta Productividad', description: 'Cómo organizar tu día.', image_url: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?q=80&w=800', course_categories: { name: 'Desarrollo Personal' } },
-  { id: '3', title: 'De Cero a Criptoinversor', description: 'Entiende blockchain.', image_url: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=800', course_categories: { name: 'Inversiones' } },
-  { id: '4', title: 'Gestión de Equipos Remotos', description: 'Lidera equipos a distancia.', image_url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=800', course_categories: { name: 'Negocios' } },
-  { id: '5', title: 'Psicología de Ventas', description: 'Vende más sin parecer vendedor.', image_url: 'https://images.unsplash.com/photo-1556761175-4b46a572b786?q=80&w=800', course_categories: { name: 'Marketing' } },
-  { id: '6', title: 'Bolsa de Valores para Novatos', description: 'Tu primera inversión.', image_url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=800', course_categories: { name: 'Inversiones' } }
-];
+
 
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -47,9 +40,9 @@ export function StudyPlan() {
   // Tab state
   const [activeTab, setActiveTab] = useState<'dashboard' | 'goals' | 'habits'>('dashboard');
 
-  // Supabase courses - ¡CARGA INSTANTÁNEA (0ms) con mocks y sincronización en segundo plano!
-  const [courses, setCourses] = useState<any[]>(localMocks);
-  const [loadingCourses] = useState(false);
+  // Supabase courses
+  const [courses, setCourses] = useState<any[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
   // Backend backed state
   const {
@@ -102,33 +95,22 @@ export function StudyPlan() {
   const [coursePage, setCoursePage] = useState(1);
   const coursesPerPage = 3;
 
-  // Cargar cursos reales de Supabase en segundo plano (Background Sync) para evitar demoras
+  // Cargar cursos reales de Supabase
   useEffect(() => {
     async function fetchCourses() {
+      setLoadingCourses(true);
       try {
-        const fetchPromise = supabase
+        const { data, error } = await supabase
           .from('courses')
           .select('id, title, description, image_url, course_categories(name)')
           .eq('is_active', true);
 
-        // Limitar la espera a máximo 2.5 segundos para no colgar la UI si la red está lenta
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500));
-        
-        const { data } = await Promise.race([fetchPromise, timeoutPromise]) as any;
-
-        if (data && data.length > 0) {
-          // Fusionar cursos de la base de datos con los locales mock sin duplicados
-          const merged = [...data];
-          localMocks.forEach(m => {
-            if (!merged.find(x => String(x.id) === String(m.id))) {
-              merged.push(m);
-            }
-          });
-          setCourses(merged);
-        }
+        if (error) throw error;
+        setCourses(data || []);
       } catch (err) {
-        // En caso de lentitud o error, el usuario sigue teniendo la lista mock local instantánea
-        console.warn('Sincronización de cursos en segundo plano pausada o en timeout. Usando caché local.');
+        console.error('Error fetching courses:', err);
+      } finally {
+        setLoadingCourses(false);
       }
     }
     fetchCourses();
@@ -235,45 +217,49 @@ export function StudyPlan() {
     await supabase.from('study_goals').delete().eq('id', id);
   };
 
-  // Handlers para Sub-tareas de Metas
-  const handleAddSubTask = (goalId: string, text: string) => {
+  const handleAddSubTask = async (goalId: string, text: string) => {
     if (!text.trim()) return;
+    const newSubtask = { id: generateId(), text: text.trim(), completed: false };
+    
+    let updatedSubtasks: any[] = [];
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = (g as any).subtasks || [];
-        return {
-          ...g,
-          subtasks: [...subtasks, { id: generateId(), text: text.trim(), completed: false }]
-        };
+        updatedSubtasks = [...((g as any).subtasks || []), newSubtask];
+        return { ...g, subtasks: updatedSubtasks };
       }
       return g;
     });
-    setGoals(updated);
     
+    setGoals(updated);
+    await supabase.from('study_goals').update({ subtasks: updatedSubtasks }).eq('id', goalId);
   };
 
-  const handleToggleSubTask = (goalId: string, subTaskId: string) => {
+  const handleToggleSubTask = async (goalId: string, subTaskId: string) => {
+    let updatedSubtasks: any[] = [];
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = ((g as any).subtasks || []).map((s: any) => s.id === subTaskId ? { ...s, completed: !s.completed } : s);
-        return { ...g, subtasks };
+        updatedSubtasks = ((g as any).subtasks || []).map((s: any) => s.id === subTaskId ? { ...s, completed: !s.completed } : s);
+        return { ...g, subtasks: updatedSubtasks };
       }
       return g;
     });
-    setGoals(updated);
     
+    setGoals(updated);
+    await supabase.from('study_goals').update({ subtasks: updatedSubtasks }).eq('id', goalId);
   };
 
-  const handleDeleteSubTask = (goalId: string, subTaskId: string) => {
+  const handleDeleteSubTask = async (goalId: string, subTaskId: string) => {
+    let updatedSubtasks: any[] = [];
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = ((g as any).subtasks || []).filter((s: any) => s.id !== subTaskId);
-        return { ...g, subtasks };
+        updatedSubtasks = ((g as any).subtasks || []).filter((s: any) => s.id !== subTaskId);
+        return { ...g, subtasks: updatedSubtasks };
       }
       return g;
     });
-    setGoals(updated);
     
+    setGoals(updated);
+    await supabase.from('study_goals').update({ subtasks: updatedSubtasks }).eq('id', goalId);
   };
 
   // Handlers para Tareas

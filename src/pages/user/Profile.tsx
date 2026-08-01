@@ -171,14 +171,14 @@ export function Profile() {
             disabled={uploadingAvatar}
           />
         </div>
-        <div className="flex-1">
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">{fullName || 'Usuario'}</h3>
-              <p className="text-gray-500 text-sm">{user?.email}</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xl font-bold text-gray-900 truncate">{fullName || 'Usuario'}</h3>
+              <p className="text-gray-500 text-sm truncate" title={user?.email}>{user?.email}</p>
             </div>
             {/* Gamification Badge */}
-            <div className="bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-xl flex flex-col items-center justify-center shadow-sm">
+            <div className="bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-xl flex flex-col items-center justify-center shadow-sm shrink-0">
               <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider">Nivel {Math.floor((profile?.xp || 0) / 1000) + 1}</span>
               <div className="flex items-center gap-1">
                 <Star size={10} className="text-yellow-500 fill-yellow-500" />

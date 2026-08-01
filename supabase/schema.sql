@@ -20,13 +20,16 @@ CREATE TABLE public.users_profiles (
   full_name VARCHAR(255),
   role user_role DEFAULT 'user',
   status user_status DEFAULT 'pending',
+  phone VARCHAR(50),
+  telegram VARCHAR(100),
+  payment_receipt_url TEXT,
   avatar_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Subscriptions
-CREATE TYPE subscription_status AS ENUM ('active', 'expired', 'pending', 'suspended');
+CREATE TYPE subscription_status AS ENUM ('active', 'expired', 'pending', 'suspended', 'pending_renewal');
 
 CREATE TABLE public.subscriptions (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -34,6 +37,7 @@ CREATE TABLE public.subscriptions (
   status subscription_status DEFAULT 'pending',
   start_date TIMESTAMP WITH TIME ZONE,
   end_date TIMESTAMP WITH TIME ZONE,
+  payment_receipt_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -119,6 +123,7 @@ CREATE TABLE public.user_contributions (
   description TEXT,
   link_url TEXT,
   contribution_type VARCHAR(100), -- course_link, book, tip, etc.
+  category VARCHAR(100) DEFAULT 'General',
   status contribution_status DEFAULT 'pending',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -138,12 +143,29 @@ CREATE TABLE public.notifications (
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users_profiles (id, email, full_name, role, status)
-  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 'user', 'pending');
+  INSERT INTO public.users_profiles (id, email, full_name, role, status, phone, telegram, payment_receipt_url)
+  VALUES (
+    new.id, 
+    new.email, 
+    new.raw_user_meta_data->>'full_name', 
+    'user', 
+    'pending',
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'telegram',
+    new.raw_user_meta_data->>'payment_receipt_url'
+  );
   
   -- Create initial pending subscription
-  INSERT INTO public.subscriptions (user_id, status)
-  VALUES (new.id, 'pending');
+  INSERT INTO public.subscriptions (user_id, status, start_date, payment_receipt_url)
+  VALUES (
+    new.id, 
+    'pending', 
+    CASE 
+      WHEN new.raw_user_meta_data->>'start_date' IS NOT NULL THEN (new.raw_user_meta_data->>'start_date')::TIMESTAMP WITH TIME ZONE
+      ELSE NULL
+    END,
+    new.raw_user_meta_data->>'payment_receipt_url'
+  );
   
   RETURN new;
 END;

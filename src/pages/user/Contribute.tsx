@@ -14,8 +14,11 @@ export function Contribute() {
   // Form states
   const [title, setTitle] = useState('');
   const [type, setType] = useState('tip'); // 'tip', 'book', 'link'
+  const [category, setCategory] = useState('General');
   const [description, setDescription] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  
+  const CATEGORIES = ['General', 'Libros y Manuales', 'Herramientas Digitales', 'Tips de Estudio', 'Apuntes y Resúmenes', 'Videos de Apoyo'];
   
   // States para "Tip" (Paso a paso)
   const [steps, setSteps] = useState<string[]>(['']);
@@ -113,6 +116,7 @@ export function Contribute() {
           description: finalDescription,
           link_url: type === 'tip' ? null : linkUrl,
           contribution_type: type,
+          category: category,
           status: profile?.role === 'admin' ? 'approved' : 'pending'
         });
 
@@ -212,7 +216,23 @@ export function Contribute() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">2. Título de tu Aporte</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">2. Categoría</label>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {CATEGORIES.map(cat => (
+                  <button 
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${category === cat ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">3. Título de tu Aporte</label>
               <input 
                 type="text" 
                 required 

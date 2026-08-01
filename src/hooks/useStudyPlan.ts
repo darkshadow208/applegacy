@@ -26,6 +26,7 @@ export interface StudyProfile {
   daily_time_goal: number;
   schedule_slots: string[];
   reminders_enabled: boolean;
+  reminder_times: string[];
 }
 
 export function useStudyPlan(userId: string | undefined) {
@@ -35,7 +36,8 @@ export function useStudyPlan(userId: string | undefined) {
   const [profile, setProfile] = useState<StudyProfile>({
     daily_time_goal: 45,
     schedule_slots: ['Lunes 18:00', 'Miércoles 20:00', 'Viernes 18:00'],
-    reminders_enabled: true
+    reminders_enabled: true,
+    reminder_times: ['09:00', '18:00']
   });
   const [courseConfigs, setCourseConfigs] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);

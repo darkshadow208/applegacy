@@ -86,7 +86,17 @@ export function Subscription() {
       
       if (dbError) throw dbError;
 
+      // Guardar también el comprobante en la suscripción y cambiar estado a pending_renewal si estaba expirada
+      await supabase
+        .from('subscriptions')
+        .update({ 
+          status: 'pending_renewal', 
+          payment_receipt_url: publicUrl 
+        })
+        .eq('user_id', user.id);
+
       // Update UI
+      setSubscription({ ...subscription, status: 'pending_renewal', payment_receipt_url: publicUrl });
       setPayments([newPayment, ...payments]);
       setShowForm(false);
       setSuccessMsg('Comprobante enviado con éxito. Un administrador lo revisará pronto.');
@@ -112,6 +122,8 @@ export function Subscription() {
       case 'expired':
       case 'suspended':
         return <span className="flex items-center gap-1 bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"><XCircle size={12}/> {status === 'rejected' ? 'Rechazado' : 'Inactiva'}</span>;
+      case 'pending_renewal':
+        return <span className="flex items-center gap-1 bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"><Clock size={12}/> Renovación Pendiente</span>;
       default:
         return <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{status}</span>;
     }
@@ -158,7 +170,7 @@ export function Subscription() {
               <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Estado actual</p>
               <div className="flex items-center justify-between">
                 <h3 className="text-3xl font-bold text-gray-900 capitalize">
-                  {subscription?.status === 'active' ? 'Plan Premium' : 'Plan Básico'}
+                  {subscription?.status === 'active' ? 'Plan Premium' : subscription?.status === 'pending_renewal' ? 'Renovación en Proceso' : 'Plan Básico'}
                 </h3>
                 {getStatusBadge(subscription?.status || 'pending')}
               </div>

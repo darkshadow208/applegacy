@@ -174,12 +174,12 @@ export function Dashboard() {
           <div>
             <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">Membresía</p>
             <h3 className="text-xl font-bold text-gray-900 capitalize">
-              {subStatus === 'active' ? 'Activa' : subStatus === 'pending' ? 'Pendiente' : 'Expirada'}
+              {subStatus === 'active' ? 'Activa' : subStatus === 'pending_renewal' ? 'Renovación en Proceso' : subStatus === 'pending' ? 'Pendiente' : 'Expirada'}
             </h3>
              <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
                <Calendar size={14} /> 
                {daysLeft !== null 
-                 ? (daysLeft > 0 ? `Vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}` : 'Ya expirada')
+                 ? (daysLeft > 0 ? `Vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}` : subStatus === 'pending_renewal' ? 'Esperando aprobación...' : 'Ya expirada')
                  : 'En espera de aprobación'}
             </p>
           </div>

@@ -1,36 +1,49 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { ExternalLink, Link as LinkIcon, BookOpen, Lightbulb, ThumbsUp, Loader2 } from 'lucide-react';
+import { ExternalLink, Link as LinkIcon, BookOpen, Lightbulb, ThumbsUp, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const CATEGORIES = ['Todas', 'General', 'Libros y Manuales', 'Herramientas Digitales', 'Tips de Estudio', 'Apuntes y Resúmenes', 'Videos de Apoyo'];
+const ITEMS_PER_PAGE = 10;
 
 export function Community() {
   const [contributions, setContributions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     async function fetchContributions() {
+      setLoading(true);
       // Promesa de timeout para evitar quedarse cargando infinitamente si hay un problema de red
       const timeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve({ data: [], error: null }), 5000);
+        setTimeout(() => resolve({ data: [], error: null, count: 0 }), 5000);
       });
 
       try {
-        const queryPromise = supabase
+        let query = supabase
           .from('user_contributions')
-          .select(`
-            *,
-            users_profiles (full_name, avatar_url)
-          `)
-          .eq('status', 'approved')
-          .order('created_at', { ascending: false });
+          .select('*, users_profiles (full_name, avatar_url)', { count: 'exact' })
+          .eq('status', 'approved');
+
+        if (selectedCategory !== 'Todas') {
+          query = query.eq('category', selectedCategory);
+        }
+
+        query = query.order('created_at', { ascending: false })
+          .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1);
 
         // Competencia de promesas
-        const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+        const { data, count, error } = await Promise.race([query, timeoutPromise]) as any;
 
         if (error) throw error;
         
         if (data) {
           setContributions(data);
+          if (count !== null && count !== undefined) {
+            setTotalPages(Math.ceil(count / ITEMS_PER_PAGE) || 1);
+          }
         }
       } catch (err) {
         console.error('Error fetching contributions:', err);
@@ -40,7 +53,7 @@ export function Community() {
       }
     }
     fetchContributions();
-  }, []);
+  }, [selectedCategory, page]);
 
   const getIcon = (type: string) => {
     switch(type) {
@@ -71,18 +84,34 @@ export function Community() {
         </div>
       </Link>
 
+      <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat}
+            onClick={() => { setSelectedCategory(cat); setPage(1); }}
+            className={`whitespace-nowrap px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+              selectedCategory === cat 
+                ? 'bg-gray-900 text-white shadow-md' 
+                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-col gap-4 mt-2">
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div>
         ) : contributions.length === 0 ? (
           <div className="text-center py-10 bg-white/60 backdrop-blur-md rounded-3xl border border-white/80">
-            <p className="text-gray-500">Aún no hay aportes de la comunidad.</p>
+            <p className="text-gray-500">Aún no hay aportes en esta categoría.</p>
           </div>
         ) : (
           contributions.map((item) => (
             <div key={item.id} className="bg-white/80 backdrop-blur-md rounded-3xl p-5 shadow-sm border border-white/80 flex flex-col gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden shrink-0">
                   {item.users_profiles?.avatar_url ? (
                     <img src={item.users_profiles.avatar_url} alt="User" className="w-full h-full object-cover" />
                   ) : (
@@ -95,9 +124,9 @@ export function Community() {
                   <p className="text-sm font-bold text-gray-900">{item.users_profiles?.full_name || 'Usuario'}</p>
                   <p className="text-[10px] text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
                 </div>
-                <div className="ml-auto bg-gray-100 text-gray-600 px-2 py-1 rounded-md flex items-center gap-1 text-[10px] font-bold uppercase">
+                <div className="ml-auto bg-gray-100 text-gray-600 px-2 py-1 rounded-md flex items-center gap-1 text-[10px] font-bold uppercase shrink-0">
                   {getIcon(item.contribution_type)}
-                  <span>{item.contribution_type}</span>
+                  <span>{item.category || item.contribution_type}</span>
                 </div>
               </div>
               
@@ -121,6 +150,28 @@ export function Community() {
           ))
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-6">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1 || loading}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-gray-200 text-gray-600 disabled:opacity-50 hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <span className="text-sm font-bold text-gray-700">
+            Página {page} de {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages || loading}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-gray-200 text-gray-600 disabled:opacity-50 hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      )}
 
     </div>
   );
