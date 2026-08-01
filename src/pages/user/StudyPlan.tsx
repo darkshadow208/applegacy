@@ -49,17 +49,26 @@ export function StudyPlan() {
     courseConfigs, setCourseConfigs} = useStudyPlan(user?.id);
 
   const dailyTime = studyProfile?.daily_time_goal || 45;
-  const setDailyTime = (val: number) => setStudyProfile({...studyProfile, daily_time_goal: val});
+  const setDailyTime = async (val: number) => {
+    setStudyProfile({...studyProfile, daily_time_goal: val} as any);
+    if (user) await supabase.from('student_study_profile').update({ daily_time_goal: val }).eq('user_id', user.id);
+  };
   const schedule = studyProfile?.schedule_slots || [];
-  const setSchedule = (val: string[]) => setStudyProfile({...studyProfile, schedule_slots: val});
+  const setSchedule = async (val: string[]) => {
+    setStudyProfile({...studyProfile, schedule_slots: val} as any);
+    if (user) await supabase.from('student_study_profile').update({ schedule_slots: val }).eq('user_id', user.id);
+  };
   const remindersEnabled = studyProfile?.reminders_enabled ?? true;
-  const setRemindersEnabled = (val: boolean) => setStudyProfile({...studyProfile, reminders_enabled: val});
+  const setRemindersEnabled = async (val: boolean) => {
+    setStudyProfile({...studyProfile, reminders_enabled: val} as any);
+    if (user) await supabase.from('student_study_profile').update({ reminders_enabled: val }).eq('user_id', user.id);
+  };
   
   const [newGoalText, setNewGoalText] = useState('');
   const [newGoalPeriod, setNewGoalPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [newTaskText, setNewTaskText] = useState('');
   const [newHabitText, setNewHabitText] = useState('');
-  const [reminderTimes, setReminderTimes] = useState<string[]>(['09:00', '18:00']);
+  const reminderTimes = studyProfile?.reminder_times || ['09:00', '18:00'];
   const [newReminderTime, setNewReminderTime] = useState('18:00');
   const [selectedCourseToAdd, setSelectedCourseToAdd] = useState('');
 
@@ -190,10 +199,10 @@ export function StudyPlan() {
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGoalText.trim() || !user) return;
-    const newGoal = { id: Date.now().toString(), text: newGoalText.trim(), period: newGoalPeriod, completed: false, subtasks: [] };
+    const newGoal = { id: crypto.randomUUID(), text: newGoalText.trim(), period: newGoalPeriod, completed: false };
     setGoals([...goals, newGoal as any]);
     setNewGoalText('');
-    await supabase.from('study_goals').insert({ id: newGoal.id, user_id: user.id, text: newGoal.text, period: newGoal.period, completed: false, subtasks: [] });
+    await supabase.from('study_goals').insert({ id: newGoal.id, user_id: user.id, text: newGoal.text, period: newGoal.period, completed: false });
   };
 
   const handleToggleGoal = async (id: string) => {
@@ -218,13 +227,13 @@ export function StudyPlan() {
         const subtasks = (g as any).subtasks || [];
         return {
           ...g,
-          subtasks: [...subtasks, { id: Date.now().toString(), text: text.trim(), completed: false }]
+          subtasks: [...subtasks, { id: crypto.randomUUID(), text: text.trim(), completed: false }]
         };
       }
       return g;
     });
     setGoals(updated);
-    saveToStorage(courseConfigs, updated);
+    
   };
 
   const handleToggleSubTask = (goalId: string, subTaskId: string) => {
@@ -236,7 +245,7 @@ export function StudyPlan() {
       return g;
     });
     setGoals(updated);
-    saveToStorage(courseConfigs, updated);
+    
   };
 
   const handleDeleteSubTask = (goalId: string, subTaskId: string) => {
@@ -248,14 +257,14 @@ export function StudyPlan() {
       return g;
     });
     setGoals(updated);
-    saveToStorage(courseConfigs, updated);
+    
   };
 
   // Handlers para Tareas
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskText.trim() || !user) return;
-    const newTask = { id: Date.now().toString(), text: newTaskText.trim(), completed: false };
+    const newTask = { id: crypto.randomUUID(), text: newTaskText.trim(), completed: false };
     setTasks([...tasks, newTask]);
     setNewTaskText('');
     await supabase.from('study_tasks').insert({ id: newTask.id, user_id: user.id, text: newTask.text, completed: false });
@@ -279,7 +288,7 @@ export function StudyPlan() {
   const handleAddHabit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHabitText.trim() || !user) return;
-    const newHabit = { id: Date.now().toString(), name: newHabitText.trim(), streak: 0, completed_today: false };
+    const newHabit = { id: crypto.randomUUID(), name: newHabitText.trim(), streak: 0, completed_today: false };
     setHabits([...habits, newHabit as any]);
     setNewHabitText('');
     await supabase.from('study_habits').insert({ id: newHabit.id, user_id: user.id, name: newHabit.name, streak: 0, completed_today: false });
@@ -303,21 +312,21 @@ export function StudyPlan() {
     await supabase.from('study_habits').delete().eq('id', id);
   };
 
-  const handleAddReminderTime = () => {
+  const handleAddReminderTime = async () => {
     if (!newReminderTime) return;
     if (reminderTimes.includes(newReminderTime)) {
       alert('Esta hora de aviso ya está programada.');
       return;
     }
     const updated = [...reminderTimes, newReminderTime].sort();
-    setReminderTimes(updated);
-    saveToStorage(courseConfigs, goals, tasks, habits, dailyTime, schedule, remindersEnabled, updated);
+    setStudyProfile({...studyProfile, reminder_times: updated} as any);
+    if (user) await supabase.from('student_study_profile').update({ reminder_times: updated }).eq('user_id', user.id);
   };
 
-  const handleDeleteReminderTime = (time: string) => {
+  const handleDeleteReminderTime = async (time: string) => {
     const updated = reminderTimes.filter(t => t !== time);
-    setReminderTimes(updated);
-    saveToStorage(courseConfigs, goals, tasks, habits, dailyTime, schedule, remindersEnabled, updated);
+    setStudyProfile({...studyProfile, reminder_times: updated} as any);
+    if (user) await supabase.from('student_study_profile').update({ reminder_times: updated }).eq('user_id', user.id);
   };
 
   // Estadísticas calculadas basadas en cursos DE INTERÉS (tracked)
@@ -602,7 +611,7 @@ export function StudyPlan() {
               <button 
                 onClick={() => {
                   setRemindersEnabled(!remindersEnabled);
-                  saveToStorage(courseConfigs, goals, tasks, habits, dailyTime, schedule, !remindersEnabled);
+                  
                 }}
                 className={`w-12 h-6 rounded-full p-1 transition-colors relative flex items-center ${
                   remindersEnabled ? 'bg-green-500 justify-end' : 'bg-gray-300 justify-start'
@@ -894,7 +903,7 @@ export function StudyPlan() {
                         updated = [...schedule, slot];
                       }
                       setSchedule(updated);
-                      saveToStorage(courseConfigs, goals, tasks, habits, dailyTime, updated);
+                      
                     }}
                     className={`flex items-center justify-between p-3 rounded-xl border text-xs font-bold transition-all ${
                       isSelected 
