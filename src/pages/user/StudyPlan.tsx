@@ -29,6 +29,17 @@ const localMocks = [
   { id: '6', title: 'Bolsa de Valores para Novatos', description: 'Tu primera inversión.', image_url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=800', course_categories: { name: 'Inversiones' } }
 ];
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 export function StudyPlan() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -199,7 +210,7 @@ export function StudyPlan() {
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGoalText.trim() || !user) return;
-    const newGoal = { id: crypto.randomUUID(), text: newGoalText.trim(), period: newGoalPeriod, completed: false };
+    const newGoal = { id: generateId(), text: newGoalText.trim(), period: newGoalPeriod, completed: false };
     setGoals([...goals, newGoal as any]);
     setNewGoalText('');
     await supabase.from('study_goals').insert({ id: newGoal.id, user_id: user.id, text: newGoal.text, period: newGoal.period, completed: false });
@@ -227,7 +238,7 @@ export function StudyPlan() {
         const subtasks = (g as any).subtasks || [];
         return {
           ...g,
-          subtasks: [...subtasks, { id: crypto.randomUUID(), text: text.trim(), completed: false }]
+          subtasks: [...subtasks, { id: generateId(), text: text.trim(), completed: false }]
         };
       }
       return g;
@@ -264,7 +275,7 @@ export function StudyPlan() {
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskText.trim() || !user) return;
-    const newTask = { id: crypto.randomUUID(), text: newTaskText.trim(), completed: false };
+    const newTask = { id: generateId(), text: newTaskText.trim(), completed: false };
     setTasks([...tasks, newTask]);
     setNewTaskText('');
     await supabase.from('study_tasks').insert({ id: newTask.id, user_id: user.id, text: newTask.text, completed: false });
@@ -288,7 +299,7 @@ export function StudyPlan() {
   const handleAddHabit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHabitText.trim() || !user) return;
-    const newHabit = { id: crypto.randomUUID(), name: newHabitText.trim(), streak: 0, completed_today: false };
+    const newHabit = { id: generateId(), name: newHabitText.trim(), streak: 0, completed_today: false };
     setHabits([...habits, newHabit as any]);
     setNewHabitText('');
     await supabase.from('study_habits').insert({ id: newHabit.id, user_id: user.id, name: newHabit.name, streak: 0, completed_today: false });
