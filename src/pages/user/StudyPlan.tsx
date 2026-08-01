@@ -7,6 +7,7 @@ import {
   TrendingUp, Play, Plus, Trash2, CheckCircle2, Bookmark,
   Award, Bell, Loader2
 } from 'lucide-react';
+import { notificationService } from '../../lib/notifications';
 
 interface CourseConfig {
   status: 'pending' | 'progress' | 'completed';
@@ -182,55 +183,13 @@ export function StudyPlan() {
     }));
   };
 
-  // Real Local Web Reminders Trigger using Browser Notification API
+  // Real Local Reminders using Capacitor LocalNotifications
   useEffect(() => {
-    if (!remindersEnabled || reminderTimes.length === 0) return;
-
-    // Solicitar permiso del navegador al activar recordatorios
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+    if (remindersEnabled) {
+      notificationService.scheduleDailyReminders(reminderTimes);
+    } else {
+      notificationService.scheduleDailyReminders([]);
     }
-
-    const checkedTimes = new Set<string>(); // Evita repetir notificaciones en el mismo minuto
-
-    const interval = setInterval(() => {
-      const now = new Date();
-      const HH = String(now.getHours()).padStart(2, '0');
-      const MM = String(now.getMinutes()).padStart(2, '0');
-      const currentTimeStr = `${HH}:${MM}`;
-
-      // Si coincide con alguna hora programada y no ha sido notificada en este minuto
-      if (reminderTimes.includes(currentTimeStr) && !checkedTimes.has(currentTimeStr)) {
-        checkedTimes.add(currentTimeStr);
-
-        // Reproducir un suave sonido de campana de estudio
-        try {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2857/2857-84.wav');
-          audio.volume = 0.5;
-          audio.play();
-        } catch (e) {
-          console.warn('Audio play blocked by browser autoplay policy:', e);
-        }
-
-        // Lanzar notificación real del navegador
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('📚 ¡Hora de Estudiar en Legacy Academy!', {
-            body: 'Es momento de avanzar en tus metas del plan de estudio. ¡Tu disciplina creará tu éxito! 🚀',
-            icon: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?q=80&w=200'
-          });
-        } else {
-          // Fallback a alert elegante en pantalla si las notificaciones de escritorio están bloqueadas
-          alert('⏰ ¡Recordatorio de Estudio! Es hora de conectarte y avanzar en tu plan de estudio de hoy. 🚀');
-        }
-      }
-
-      // Limpiar el registro al cambiar de minuto para estar listo para la próxima hora
-      if (now.getSeconds() === 0) {
-        checkedTimes.clear();
-      }
-    }, 1000); // Revisar cada segundo para máxima exactitud
-
-    return () => clearInterval(interval);
   }, [remindersEnabled, reminderTimes]);
 
   // Handlers para Cursos de Interés

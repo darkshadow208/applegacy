@@ -79,6 +79,35 @@ export const notificationService = {
     }
   },
 
+  async scheduleDailyReminders(times: string[]) {
+    try {
+      const hasPermission = await this.requestPermissions();
+      if (!hasPermission) return;
+
+      const pending = await LocalNotifications.getPending();
+      const studyReminders = pending.notifications.filter(n => n.id >= 2000 && n.id <= 2999);
+      if (studyReminders.length > 0) {
+        await LocalNotifications.cancel({ notifications: studyReminders });
+      }
+
+      if (times.length === 0) return;
+
+      const notifications = times.map((time, index) => {
+        const [hour, minute] = time.split(':').map(Number);
+        return {
+          title: '📚 ¡Hora de Estudiar!',
+          body: 'Es momento de avanzar en tus metas del plan de estudio en Legacy Academy. ¡Tu disciplina creará tu éxito! 🚀',
+          id: 2000 + index,
+          schedule: { on: { hour, minute } },
+        };
+      });
+
+      await LocalNotifications.schedule({ notifications });
+    } catch (err) {
+      console.warn('LocalNotifications scheduleDailyReminders failed:', err);
+    }
+  },
+
   async clearAll() {
     try {
       const pending = await LocalNotifications.getPending();
