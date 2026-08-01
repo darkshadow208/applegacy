@@ -20,7 +20,7 @@ export function AdminComms({ showToast }: AdminCommsProps) {
 
   const fetchAnnouncements = async () => {
     try {
-      const { data, error } = await supabase.from('global_announcements').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('news_posts').select('*').eq('type', 'announcement').order('created_at', { ascending: false });
       if (error) throw error;
       setAnnouncementsList(data || []);
     } catch (err) {
@@ -37,11 +37,20 @@ export function AdminComms({ showToast }: AdminCommsProps) {
     if (!announcementText.trim()) return;
     setSavingAnnouncement(true);
     try {
-      const { error } = await supabase.from('global_announcements').insert({
+      const { error } = await supabase.from('news_posts').insert({
+        title: 'Aviso Global',
         content: announcementText,
+        type: 'announcement',
         is_active: true
       });
       if (error) throw error;
+
+      await supabase.from('notifications').insert({
+        user_id: null,
+        title: '⚠️ Nuevo Aviso Global',
+        message: announcementText.length > 50 ? announcementText.substring(0, 47) + '...' : announcementText,
+        is_read: false
+      });
 
       showToast('Aviso Global Publicado', 'success');
       setAnnouncementText('');
@@ -56,7 +65,7 @@ export function AdminComms({ showToast }: AdminCommsProps) {
 
   const handleRemoveAnnouncement = async (annId: string) => {
     try {
-      const { error } = await supabase.from('global_announcements').delete().eq('id', annId);
+      const { error } = await supabase.from('news_posts').delete().eq('id', annId);
       if (error) throw error;
       showToast('Aviso eliminado', 'success');
       fetchAnnouncements();
@@ -72,10 +81,12 @@ export function AdminComms({ showToast }: AdminCommsProps) {
     setSavingBlog(true);
     
     try {
-      const { error } = await supabase.from('blog_posts').insert({
+      const { error } = await supabase.from('news_posts').insert({
         title: blogTitle,
         content: blogContent,
-        image_url: blogImageUrl || 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800'
+        image_url: blogImageUrl || 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800',
+        type: 'blog',
+        is_active: true
       });
       if (error) throw error;
 

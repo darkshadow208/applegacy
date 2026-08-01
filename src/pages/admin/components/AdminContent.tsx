@@ -123,6 +123,13 @@ export function AdminContent({ showToast }: AdminContentProps) {
 
       if (error) throw error;
 
+      await supabase.from('notifications').insert({
+        user_id: null,
+        title: '🚀 ¡Nuevo Curso Disponible!',
+        message: `Se ha publicado el curso "${courseTitle}". ¡Ve a revisarlo!`,
+        is_read: false
+      });
+
       showToast('🎉 ¡Curso publicado exitosamente!', 'success');
       setCourseTitle(''); setCourseDesc(''); setCourseDriveUrl(''); setCourseImageUrl(''); setCourseCategory('');
       fetchCourses(pageCourses);

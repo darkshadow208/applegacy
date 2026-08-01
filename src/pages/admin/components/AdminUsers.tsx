@@ -143,6 +143,14 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
       });
       
       if (error) throw error;
+
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: '👑 Suscripción Actualizada',
+        message: `El administrador ha modificado las fechas de tu membresía VIP. Tienes acceso hasta el ${new Date(editingSubEndDate).toLocaleDateString()}.`,
+        is_read: false
+      });
+
       showToast('Fechas de suscripción actualizadas', 'success');
       setEditingSubUserId(null);
       fetchUsers();

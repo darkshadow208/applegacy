@@ -161,6 +161,13 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
           message: 'Tu renovación ha sido aprobada. ¡Sigues siendo VIP!',
           is_read: false
         });
+      } else if (newStatus === 'rejected') {
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          title: '❌ Pago Rechazado',
+          message: 'Tu comprobante de pago ha sido rechazado. Por favor, verifica la imagen y vuelve a enviarla.',
+          is_read: false
+        });
       }
 
       showToast(`Pago ${newStatus === 'approved' ? 'aprobado' : 'rechazado'}.`, 'success');
@@ -171,10 +178,33 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
     }
   };
 
-  const handleReviewContribution = async (contId: string, newStatus: 'approved' | 'rejected') => {
+  const handleReviewContribution = async (contId: string, contUserId: string, contTitle: string, newStatus: 'approved' | 'rejected') => {
     try {
       const { error } = await supabase.from('user_contributions').update({ status: newStatus }).eq('id', contId);
       if (error) throw error;
+
+      if (newStatus === 'approved') {
+        await supabase.from('notifications').insert({
+          user_id: null,
+          title: '🌟 Nuevo Aporte en la Comunidad',
+          message: `Se ha publicado un nuevo aporte: "${contTitle}". ¡Ve a revisarlo!`,
+          is_read: false
+        });
+        
+        await supabase.from('notifications').insert({
+          user_id: contUserId,
+          title: '✅ Aporte Aprobado',
+          message: `Tu aporte "${contTitle}" ha sido aprobado y ya es público para toda la comunidad. ¡Gracias!`,
+          is_read: false
+        });
+      } else if (newStatus === 'rejected') {
+        await supabase.from('notifications').insert({
+          user_id: contUserId,
+          title: '❌ Aporte Rechazado',
+          message: `Lo sentimos, tu aporte "${contTitle}" no cumple con los lineamientos y ha sido rechazado.`,
+          is_read: false
+        });
+      }
 
       showToast(`Aporte ${newStatus === 'approved' ? 'aprobado' : 'rechazado'}.`, 'success');
       fetchPendingContributions(pageContributions);
@@ -355,10 +385,10 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
                   </div>
 
                   <div className="flex gap-2 justify-end">
-                    <button onClick={() => handleReviewContribution(cont.id, 'approved')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
+                    <button onClick={() => handleReviewContribution(cont.id, cont.user_id, cont.title, 'approved')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
                       <Check size={14} /> Aprobar
                     </button>
-                    <button onClick={() => handleReviewContribution(cont.id, 'rejected')} className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
+                    <button onClick={() => handleReviewContribution(cont.id, cont.user_id, cont.title, 'rejected')} className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
                       <X size={14} /> Rechazar
                     </button>
                   </div>
