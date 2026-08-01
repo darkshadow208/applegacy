@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
-import { User, LogOut, Lock, Bell, ChevronRight, Loader2, Camera, CreditCard, HelpCircle, Heart, Target, Settings } from 'lucide-react';
+import { User, LogOut, Lock, Bell, ChevronRight, Loader2, Camera, CreditCard, HelpCircle, Heart, Target, Settings, Star } from 'lucide-react';
 
 const mockCourses = [
   { id: '3', title: 'De Cero a Criptoinversor', description: 'Entiende blockchain y criptomonedas.', category: 'Inversiones', image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=800', drive_url: '#' },
@@ -171,10 +171,22 @@ export function Profile() {
             disabled={uploadingAvatar}
           />
         </div>
-        <div>
-          <h3 className="text-xl font-bold text-gray-900">{fullName || 'Usuario'}</h3>
-          <p className="text-gray-500 text-sm">{user?.email}</p>
-          <div className="mt-1 flex gap-2">
+        <div className="flex-1">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">{fullName || 'Usuario'}</h3>
+              <p className="text-gray-500 text-sm">{user?.email}</p>
+            </div>
+            {/* Gamification Badge */}
+            <div className="bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-xl flex flex-col items-center justify-center shadow-sm">
+              <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider">Nivel {Math.floor((profile?.xp || 0) / 1000) + 1}</span>
+              <div className="flex items-center gap-1">
+                <Star size={10} className="text-yellow-500 fill-yellow-500" />
+                <span className="text-xs font-black text-indigo-700">{profile?.xp || 0} XP</span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 flex gap-2">
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
               profile?.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
             }`}>

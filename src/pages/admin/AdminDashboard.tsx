@@ -15,13 +15,15 @@ import {
   FileText,
   AlertTriangle,
   FileEdit,
-  Send,
-  AlertCircle,
-  Calendar
+  Send, 
+  AlertCircle, 
+  Calendar, 
+  LineChart as ChartIcon 
 } from 'lucide-react';
+import { AdminAnalytics } from './AdminAnalytics';
 
 export function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'approvals' | 'students' | 'content' | 'comms'>('approvals');
+  const [activeTab, setActiveTab] = useState<'approvals' | 'students' | 'content' | 'comms' | 'analytics'>('approvals');
   const [loading, setLoading] = useState(false);
 
   // --- CUSTOM PREMIUM TOAST NOTIFICATION SYSTEM ---
@@ -909,10 +911,23 @@ export function AdminDashboard() {
           <FileText size={16} />
           <span>Comunicados & Blog</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`px-4 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-extrabold uppercase tracking-wide shrink-0 transition-all ${
+            activeTab === 'analytics' ? 'bg-gray-950 text-white shadow-md' : 'text-gray-500 hover:bg-white/40'
+          }`}
+        >
+          <ChartIcon size={16} />
+          <span>Analíticas</span>
+        </button>
       </div>
 
       <div className="animate-fade-in">
         
+        {/* TAB 0: ANALÍTICAS */}
+        {activeTab === 'analytics' && <AdminAnalytics />}
+
         {/* TAB 1: APROBACIONES & MODERACIÓN */}
         {activeTab === 'approvals' && (
           <div className="flex flex-col gap-6">

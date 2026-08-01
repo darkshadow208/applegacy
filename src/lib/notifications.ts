@@ -50,6 +50,11 @@ export const notificationService = {
       // Listen for push notification click
       PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push action performed: ', notification);
+        const data = notification.notification.data;
+        if (data && data.url) {
+          // Despachar evento global para que UserLayout navegue
+          window.dispatchEvent(new CustomEvent('push-navigate', { detail: data.url }));
+        }
       });
 
     } catch (err) {

@@ -153,9 +153,20 @@ export function Dashboard() {
     <div className="flex flex-col gap-6 animate-fade-in">
       
       {/* Header section */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Hola, {profile?.full_name?.split(' ')[0] || 'Usuario'}</h2>
-        <p className="text-gray-500 text-sm">Qué bueno verte de nuevo. ¡Sigue creciendo!</p>
+      <div className="flex justify-between items-start">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Hola, {profile?.full_name?.split(' ')[0] || 'Usuario'}</h2>
+          <p className="text-gray-500 text-sm">Qué bueno verte de nuevo. ¡Sigue creciendo!</p>
+        </div>
+        
+        {/* Gamification Badge */}
+        <div className="bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-2xl flex flex-col items-center justify-center shadow-sm min-w-[70px]">
+          <span className="text-[10px] font-extrabold uppercase text-indigo-400 tracking-wider">Nivel {Math.floor((profile?.xp || 0) / 1000) + 1}</span>
+          <div className="flex items-center gap-1 mt-0.5">
+            <Star size={12} className="text-yellow-500 fill-yellow-500" />
+            <span className="text-sm font-black text-indigo-700">{profile?.xp || 0} XP</span>
+          </div>
+        </div>
       </div>
 
       {/* Avisos de la Academia (Banners superiores dinámicos para Estudiantes) */}

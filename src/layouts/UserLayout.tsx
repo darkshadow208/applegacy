@@ -1,4 +1,5 @@
-import { Outlet, NavLink, Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
 import { Home, BookOpen, Users, Bell, User } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
@@ -6,6 +7,17 @@ import { useNotificationStore } from '../store/notificationStore';
 export function UserLayout() {
   const { profile } = useAuthStore();
   const { unreadCount } = useNotificationStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handlePushNavigate = (e: CustomEvent) => {
+      if (e.detail) {
+        navigate(e.detail);
+      }
+    };
+    window.addEventListener('push-navigate', handlePushNavigate as EventListener);
+    return () => window.removeEventListener('push-navigate', handlePushNavigate as EventListener);
+  }, [navigate]);
 
   return (
     <div className="h-screen max-h-screen bg-[#f0f4f8] text-[#1e293b] font-sans relative overflow-hidden flex flex-col items-center justify-between">

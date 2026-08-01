@@ -8,6 +8,7 @@ import {
   Award, Bell, Loader2
 } from 'lucide-react';
 import { notificationService } from '../../lib/notifications';
+import { useStudyPlan } from '../../hooks/useStudyPlan';
 
 interface CourseConfig {
   status: 'pending' | 'progress' | 'completed';
@@ -38,7 +39,7 @@ interface Habit {
   id: string;
   name: string;
   streak: number;
-  completedToday: boolean;
+  completed_today: boolean;
   lastCompletedDate?: string;
 }
 
@@ -62,24 +63,44 @@ export function StudyPlan() {
   const [courses, setCourses] = useState<any[]>(localMocks);
   const [loadingCourses] = useState(false);
 
-  // Local storage backed state
-  const [courseConfigs, setCourseConfigs] = useState<Record<string, CourseConfig>>({});
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [dailyTime, setDailyTime] = useState<number>(45); // minutos
-  const [schedule, setSchedule] = useState<string[]>(['Lunes 18:00', 'Miércoles 20:00', 'Viernes 18:00']);
+  // Backend backed state
+  const {
+    goals, setGoals,
+    tasks, setTasks,
+    habits, setHabits,
+    profile: studyProfile, setProfile: setStudyProfile,
+    courseConfigs, setCourseConfigs,
+    loading: loadingPlan
+  } = useStudyPlan(user?.id);
+
+  const dailyTime = studyProfile?.daily_time_goal || 45;
+  const setDailyTime = (val: number) => setStudyProfile({...studyProfile, daily_time_goal: val});
+  const schedule = studyProfile?.schedule_slots || [];
+  const setSchedule = (val: string[]) => setStudyProfile({...studyProfile, schedule_slots: val});
+  const remindersEnabled = studyProfile?.reminders_enabled ?? true;
+  const setRemindersEnabled = (val: boolean) => setStudyProfile({...studyProfile, reminders_enabled: val});
+  
   const [newGoalText, setNewGoalText] = useState('');
   const [newGoalPeriod, setNewGoalPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [newTaskText, setNewTaskText] = useState('');
   const [newHabitText, setNewHabitText] = useState('');
-
-  // Notificaciones locales simulation state
-  const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderTimes, setReminderTimes] = useState<string[]>(['09:00', '18:00']);
   const [newReminderTime, setNewReminderTime] = useState('18:00');
   const [selectedCourseToAdd, setSelectedCourseToAdd] = useState('');
-  
+
+  const awardXP = async (amount: number) => {
+    if (!user) return;
+    try {
+      await supabase.rpc('add_user_xp', { p_user_id: user.id, p_amount: amount });
+      const currentProfile = useAuthStore.getState().profile;
+      if (currentProfile) {
+        useAuthStore.setState({ profile: { ...currentProfile, xp: (currentProfile.xp || 0) + amount } });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Paginación para organizar cursos
   const [coursePage, setCoursePage] = useState(1);
   const coursesPerPage = 3;
@@ -116,92 +137,7 @@ export function StudyPlan() {
     fetchCourses();
   }, []);
 
-  // Cargar datos persistidos de Local Storage
-  useEffect(() => {
-    if (!user) return;
-    const storageKey = `study_plan_${user.id}`;
-    const saved = localStorage.getItem(storageKey);
-    let loadedHabits: Habit[] = [];
-    
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.courseConfigs) setCourseConfigs(parsed.courseConfigs);
-        if (parsed.goals) setGoals(parsed.goals);
-        if (parsed.tasks) setTasks(parsed.tasks);
-        if (parsed.dailyTime) setDailyTime(parsed.dailyTime);
-        if (parsed.schedule) setSchedule(parsed.schedule);
-        if (parsed.remindersEnabled !== undefined) setRemindersEnabled(parsed.remindersEnabled);
-        if (parsed.reminderTimes) setReminderTimes(parsed.reminderTimes);
-        
-        loadedHabits = parsed.habits || [];
-      } catch (e) {
-        console.error('Error parsing study plan storage:', e);
-      }
-    } else {
-      // Semillas iniciales por defecto para mostrar algo hermoso al usuario
-      setGoals([
-        { id: 'g1', text: 'Completar el módulo 3 de Estrategia Digital', period: 'weekly', completed: false, subtasks: [{ id: 's1', text: 'Ver videos teóricos', completed: false }, { id: 's2', text: 'Resolver cuestionario', completed: true }] },
-        { id: 'g2', text: 'Estudiar 5 horas de desarrollo personal', period: 'monthly', completed: true, subtasks: [] }
-      ]);
-      setTasks([
-        { id: 't1', text: 'Revisar apuntes de Facebook Ads', completed: false },
-        { id: 't2', text: 'Ver video introductorio de Cripto', completed: true }
-      ]);
-      const initialHabits: Habit[] = [
-        { id: 'h1', name: 'Estudiar 30 min diarios', streak: 4, completedToday: false },
-        { id: 'h2', name: 'Tomar notas activas', streak: 2, completedToday: true, lastCompletedDate: new Date().toISOString().split('T')[0] }
-      ];
-      loadedHabits = initialHabits;
-      
-      setReminderTimes(['09:00', '18:00']);
-      // Configurar Masterclass y Hábitos como en curso por defecto para que no salga vacío
-      setCourseConfigs({
-        '1': { status: 'progress', priority: 'medium' },
-        '2': { status: 'pending', priority: 'medium' },
-        '3': { status: 'pending', priority: 'medium' }
-      });
-    }
-
-    // Process habits for 24h reset
-    const today = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date(Date.now() - 86400000);
-    const yesterday = yesterdayDate.toISOString().split('T')[0];
-    
-    let habitsChanged = false;
-    const processedHabits = loadedHabits.map((h: Habit) => {
-      if (!h.lastCompletedDate) return h;
-      
-      // If it's a new day and it was completed previously, reset completedToday
-      if (h.lastCompletedDate !== today && h.completedToday) {
-        habitsChanged = true;
-        // If last completed was older than yesterday, streak is broken
-        const isOlderThanYesterday = h.lastCompletedDate < yesterday;
-        return {
-          ...h,
-          completedToday: false,
-          streak: isOlderThanYesterday ? 0 : h.streak
-        };
-      }
-
-      // If it wasn't completed today, and the last time it was completed was before yesterday, streak is broken
-      if (!h.completedToday && h.lastCompletedDate < yesterday && h.streak > 0) {
-        habitsChanged = true;
-        return { ...h, streak: 0 };
-      }
-
-      return h;
-    });
-
-    setHabits(processedHabits);
-
-    // Initial save if we just created defaults or updated habits
-    if (!saved || habitsChanged) {
-      setTimeout(() => {
-        saveToStorage(undefined, undefined, undefined, processedHabits);
-      }, 500);
-    }
-  }, [user]);
+  
 
   // Guardar en Local Storage ante cualquier cambio
   const saveToStorage = (
@@ -238,85 +174,65 @@ export function StudyPlan() {
   }, [remindersEnabled, reminderTimes]);
 
   // Handlers para Cursos de Interés
-  const handleAddCourseToPlan = (courseId: string) => {
+  const handleAddCourseToPlan = async (courseId: string) => {
     if (!courseId) return;
-    const newConfigs = {
-      ...courseConfigs,
-      [courseId]: {
-        status: 'progress' as const, // entra como En Progreso por defecto
-        priority: 'medium' as const
-      }
-    };
+    const newConfigs = { ...courseConfigs, [courseId]: { status: 'progress' as const, priority: 'medium' as const } };
     setCourseConfigs(newConfigs);
-    saveToStorage(newConfigs);
     setSelectedCourseToAdd('');
-  };
-
-  const handleRemoveCourseFromPlan = (courseId: string) => {
-    const newConfigs = { ...courseConfigs };
-    delete newConfigs[courseId];
-    setCourseConfigs(newConfigs);
-    saveToStorage(newConfigs);
-    
-    // Ajustar página activa si queda vacía
-    const newTotal = Object.keys(newConfigs).length;
-    const newTotalPages = Math.ceil(newTotal / coursesPerPage);
-    if (coursePage > newTotalPages) {
-      setCoursePage(Math.max(1, newTotalPages));
+    if (user) {
+      await supabase.from('course_student_configs').upsert({ user_id: user.id, course_id: courseId, status: 'progress', priority: 'medium' });
     }
   };
 
-  const handleUpdateCourseStatus = (courseId: string, status: 'pending' | 'progress' | 'completed') => {
-    const newConfigs = {
-      ...courseConfigs,
-      [courseId]: {
-        ...(courseConfigs[courseId] || { priority: 'medium' }),
-        status
-      }
-    };
+  const handleRemoveCourseFromPlan = async (courseId: string) => {
+    const newConfigs = { ...courseConfigs };
+    delete newConfigs[courseId];
     setCourseConfigs(newConfigs);
-    saveToStorage(newConfigs);
+    const newTotalPages = Math.ceil(Object.keys(newConfigs).length / coursesPerPage);
+    if (coursePage > newTotalPages) setCoursePage(Math.max(1, newTotalPages));
+    if (user) {
+      await supabase.from('course_student_configs').delete().eq('user_id', user.id).eq('course_id', courseId);
+    }
   };
 
-  const handleUpdateCoursePriority = (courseId: string, priority: 'high' | 'medium' | 'low') => {
-    const newConfigs = {
-      ...courseConfigs,
-      [courseId]: {
-        ...(courseConfigs[courseId] || { status: 'pending' }),
-        priority
-      }
-    };
+  const handleUpdateCourseStatus = async (courseId: string, status: 'pending' | 'progress' | 'completed') => {
+    const newConfigs = { ...courseConfigs, [courseId]: { ...(courseConfigs[courseId] || { priority: 'medium' }), status } };
     setCourseConfigs(newConfigs);
-    saveToStorage(newConfigs);
+    if (user) {
+      await supabase.from('course_student_configs').upsert({ user_id: user.id, course_id: courseId, status, priority: newConfigs[courseId].priority });
+    }
+  };
+
+  const handleUpdateCoursePriority = async (courseId: string, priority: 'high' | 'medium' | 'low') => {
+    const newConfigs = { ...courseConfigs, [courseId]: { ...(courseConfigs[courseId] || { status: 'pending' }), priority } };
+    setCourseConfigs(newConfigs);
+    if (user) {
+      await supabase.from('course_student_configs').upsert({ user_id: user.id, course_id: courseId, status: newConfigs[courseId].status, priority });
+    }
   };
 
   // Handlers para Metas
-  const handleAddGoal = (e: React.FormEvent) => {
+  const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGoalText.trim()) return;
-    const newGoal: Goal = {
-      id: Date.now().toString(),
-      text: newGoalText.trim(),
-      period: newGoalPeriod,
-      completed: false,
-      subtasks: []
-    };
-    const updated = [...goals, newGoal];
-    setGoals(updated);
+    if (!newGoalText.trim() || !user) return;
+    const newGoal = { id: Date.now().toString(), text: newGoalText.trim(), period: newGoalPeriod, completed: false, subtasks: [] };
+    setGoals([...goals, newGoal as any]);
     setNewGoalText('');
-    saveToStorage(courseConfigs, updated);
+    await supabase.from('study_goals').insert({ id: newGoal.id, user_id: user.id, text: newGoal.text, period: newGoal.period, completed: false, subtasks: [] });
   };
 
-  const handleToggleGoal = (id: string) => {
-    const updated = goals.map(g => g.id === id ? { ...g, completed: !g.completed } : g);
-    setGoals(updated);
-    saveToStorage(courseConfigs, updated);
+  const handleToggleGoal = async (id: string) => {
+    const goal = goals.find(g => g.id === id);
+    if (!goal || !user) return;
+    const updatedCompleted = !goal.completed;
+    setGoals(goals.map(g => g.id === id ? { ...g, completed: updatedCompleted } : g));
+    await supabase.from('study_goals').update({ completed: updatedCompleted }).eq('id', id);
+    if (updatedCompleted) awardXP(100);
   };
 
-  const handleDeleteGoal = (id: string) => {
-    const updated = goals.filter(g => g.id !== id);
-    setGoals(updated);
-    saveToStorage(courseConfigs, updated);
+  const handleDeleteGoal = async (id: string) => {
+    setGoals(goals.filter(g => g.id !== id));
+    await supabase.from('study_goals').delete().eq('id', id);
   };
 
   // Handlers para Sub-tareas de Metas
@@ -324,7 +240,7 @@ export function StudyPlan() {
     if (!text.trim()) return;
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = g.subtasks || [];
+        const subtasks = (g as any).subtasks || [];
         return {
           ...g,
           subtasks: [...subtasks, { id: Date.now().toString(), text: text.trim(), completed: false }]
@@ -339,7 +255,7 @@ export function StudyPlan() {
   const handleToggleSubTask = (goalId: string, subTaskId: string) => {
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = (g.subtasks || []).map(s => s.id === subTaskId ? { ...s, completed: !s.completed } : s);
+        const subtasks = ((g as any).subtasks || []).map(s => s.id === subTaskId ? { ...s, completed: !s.completed } : s);
         return { ...g, subtasks };
       }
       return g;
@@ -351,7 +267,7 @@ export function StudyPlan() {
   const handleDeleteSubTask = (goalId: string, subTaskId: string) => {
     const updated = goals.map(g => {
       if (g.id === goalId) {
-        const subtasks = (g.subtasks || []).filter(s => s.id !== subTaskId);
+        const subtasks = ((g as any).subtasks || []).filter(s => s.id !== subTaskId);
         return { ...g, subtasks };
       }
       return g;
@@ -361,70 +277,55 @@ export function StudyPlan() {
   };
 
   // Handlers para Tareas
-  const handleAddTask = (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskText.trim()) return;
-    const newTask: Task = {
-      id: Date.now().toString(),
-      text: newTaskText.trim(),
-      completed: false
-    };
-    const updated = [...tasks, newTask];
-    setTasks(updated);
+    if (!newTaskText.trim() || !user) return;
+    const newTask = { id: Date.now().toString(), text: newTaskText.trim(), completed: false };
+    setTasks([...tasks, newTask]);
     setNewTaskText('');
-    saveToStorage(courseConfigs, goals, updated);
+    await supabase.from('study_tasks').insert({ id: newTask.id, user_id: user.id, text: newTask.text, completed: false });
   };
 
-  const handleToggleTask = (id: string) => {
-    const updated = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-    setTasks(updated);
-    saveToStorage(courseConfigs, goals, updated);
+  const handleToggleTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const updatedCompleted = !task.completed;
+    setTasks(tasks.map(t => t.id === id ? { ...t, completed: updatedCompleted } : t));
+    await supabase.from('study_tasks').update({ completed: updatedCompleted }).eq('id', id);
+    if (updatedCompleted) awardXP(10);
   };
 
-  const handleDeleteTask = (id: string) => {
-    const updated = tasks.filter(t => t.id !== id);
-    setTasks(updated);
-    saveToStorage(courseConfigs, goals, updated);
+  const handleDeleteTask = async (id: string) => {
+    setTasks(tasks.filter(t => t.id !== id));
+    await supabase.from('study_tasks').delete().eq('id', id);
   };
 
   // Handlers para Hábitos
-  const handleAddHabit = (e: React.FormEvent) => {
+  const handleAddHabit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newHabitText.trim()) return;
-    const newHabit: Habit = {
-      id: Date.now().toString(),
-      name: newHabitText.trim(),
-      streak: 0,
-      completedToday: false
-    };
-    const updated = [...habits, newHabit];
-    setHabits(updated);
+    if (!newHabitText.trim() || !user) return;
+    const newHabit = { id: Date.now().toString(), name: newHabitText.trim(), streak: 0, completed_today: false };
+    setHabits([...habits, newHabit as any]);
     setNewHabitText('');
-    saveToStorage(courseConfigs, goals, tasks, updated);
+    await supabase.from('study_habits').insert({ id: newHabit.id, user_id: user.id, name: newHabit.name, streak: 0, completed_today: false });
   };
 
-  const handleToggleHabit = (id: string) => {
+  const handleToggleHabit = async (id: string) => {
+    const habit = habits.find(h => h.id === id);
+    if (!habit) return;
     const today = new Date().toISOString().split('T')[0];
-    const updated = habits.map(h => {
-      if (h.id === id) {
-        const completedToday = !h.completedToday;
-        return {
-          ...h,
-          completedToday,
-          streak: completedToday ? h.streak + 1 : Math.max(0, h.streak - 1),
-          lastCompletedDate: completedToday ? today : h.lastCompletedDate
-        };
-      }
-      return h;
-    });
-    setHabits(updated);
-    saveToStorage(courseConfigs, goals, tasks, updated);
+    const completed_today = !habit.completed_today && !habit.completed_today; // Handle both camelCase and snake_case from DB
+    const newStreak = completed_today ? (habit.streak || 0) + 1 : Math.max(0, (habit.streak || 0) - 1);
+    
+    setHabits(habits.map(h => h.id === id ? { ...h, completed_today: completed_today, completed_today, streak: newStreak, last_completed_date: completed_today ? today : h.last_completed_date } : h));
+    
+    await supabase.from('study_habits').update({ completed_today: completed_today, streak: newStreak, last_completed_date: completed_today ? today : habit.last_completed_date }).eq('id', id);
+    if (completed_today) awardXP(50);
   };
 
-  const handleDeleteHabit = (id: string) => {
-    const updated = habits.filter(h => h.id !== id);
-    setHabits(updated);
-    saveToStorage(courseConfigs, goals, tasks, updated);
+  const handleDeleteHabit = async (id: string) => {
+    setHabits(habits.filter(h => h.id !== id));
+    await supabase.from('study_habits').delete().eq('id', id);
   };
 
   const handleAddReminderTime = () => {
@@ -812,7 +713,7 @@ export function StudyPlan() {
 
             <div className="flex flex-col gap-3 mt-2">
               {goals.map(g => {
-                const subtasks = g.subtasks || [];
+                const subtasks = (g as any).subtasks || [];
                 const completedSubCount = subtasks.filter(s => s.completed).length;
                 const totalSubCount = subtasks.length;
                 
@@ -975,10 +876,10 @@ export function StudyPlan() {
                       <button 
                         onClick={() => handleToggleHabit(h.id)} 
                         className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
-                          h.completedToday ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200'
+                          h.completed_today ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200'
                         }`}
                       >
-                        {h.completedToday ? <Flame size={16} fill="currentColor" /> : <Flame size={16} />}
+                        {h.completed_today ? <Flame size={16} fill="currentColor" /> : <Flame size={16} />}
                       </button>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-gray-800 truncate">{h.name}</p>

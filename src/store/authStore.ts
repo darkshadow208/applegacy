@@ -9,6 +9,7 @@ interface UserProfile {
   role: 'user' | 'admin';
   status: 'pending' | 'approved' | 'suspended';
   avatar_url?: string;
+  xp?: number;
 }
 
 interface AuthState {
