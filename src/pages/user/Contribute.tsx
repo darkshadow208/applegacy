@@ -124,19 +124,30 @@ export function Contribute() {
 
       if (result && result.error) throw result.error;
       
-      // Notificar al administrador
+      // Manejar notificaciones dependiendo de si es admin o usuario
       try {
-        const { data: adminData } = await supabase.from('users_profiles').select('id').eq('role', 'admin').limit(1).single();
-        if (adminData) {
+        if (profile?.role === 'admin') {
+          // Si es admin, el aporte ya está aprobado y público. Notificar a todos.
           await supabase.from('notifications').insert({
-            user_id: adminData.id,
-            title: '📝 Nuevo Aporte Pendiente',
-            message: `${profile?.full_name || 'Un usuario'} ha enviado un nuevo recurso: "${title}". Revísalo en el panel de administrador.`,
+            user_id: null,
+            title: '🌟 Nuevo Aporte en la Comunidad',
+            message: `Se ha publicado un nuevo aporte: "${title}". ¡Ve a revisarlo!`,
             is_read: false
           });
+        } else {
+          // Si es usuario, notificar al admin para que lo revise
+          const { data: adminData } = await supabase.from('users_profiles').select('id').eq('role', 'admin').limit(1).single();
+          if (adminData) {
+            await supabase.from('notifications').insert({
+              user_id: adminData.id,
+              title: '📝 Nuevo Aporte Pendiente',
+              message: `${profile?.full_name || 'Un usuario'} ha enviado un nuevo recurso: "${title}". Revísalo en el panel de administrador.`,
+              is_read: false
+            });
+          }
         }
-      } catch (adminNotifErr) {
-        console.warn('No se pudo notificar al admin', adminNotifErr);
+      } catch (notifErr) {
+        console.warn('No se pudo enviar notificaciones', notifErr);
       }
 
       setSuccess(true);
