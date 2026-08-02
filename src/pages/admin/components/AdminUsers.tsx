@@ -316,11 +316,19 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="font-extrabold text-sm text-gray-900">{student.full_name || 'Sin Nombre'}</h4>
-                        <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                          isExpired ? 'bg-red-100 text-red-700' : isExpiring ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
-                        }`}>
-                          {isExpired ? 'Expirado' : isExpiring ? 'Vence pronto' : student.subStatus}
-                        </span>
+                         <span className={`text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                           student.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                           student.status === 'suspended' ? 'bg-red-100 text-red-700' :
+                           isExpired ? 'bg-red-100 text-red-700' : 
+                           isExpiring ? 'bg-orange-100 text-orange-700' : 
+                           'bg-green-100 text-green-700'
+                         }`}>
+                           {student.status === 'pending' ? 'Pendiente' :
+                            student.status === 'suspended' ? 'Suspendido' :
+                            isExpired ? 'Expirado' : 
+                            isExpiring ? 'Vence pronto' : 
+                            'Activo'}
+                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-1">{student.email}</p>
                       
@@ -425,13 +433,38 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
                     </div>
                     
                     <div className="flex gap-2">
-                      <button onClick={() => handleUpdateUserStatus(student.id, 'approved')} className="bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-black cursor-pointer">
-                        Renovar 30D
-                      </button>
-                      <button onClick={() => handleUpdateUserStatus(student.id, 'suspended')} className="bg-red-50 text-red-600 text-xs font-bold px-3 py-2.5 rounded-xl hover:bg-red-100 cursor-pointer">
-                        Suspender
-                      </button>
-                    </div>
+                       {student.status === 'pending' ? (
+                         <button 
+                           onClick={() => handleUpdateUserStatus(student.id, 'approved')} 
+                           className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:scale-[1.02]"
+                         >
+                           Aprobar Registro
+                         </button>
+                       ) : student.status === 'suspended' ? (
+                         <button 
+                           onClick={() => handleUpdateUserStatus(student.id, 'approved')} 
+                           className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:scale-[1.02]"
+                         >
+                           Reactivar Cuenta
+                         </button>
+                       ) : (
+                         <button 
+                           onClick={() => handleUpdateUserStatus(student.id, 'approved')} 
+                           className="bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-black transition-colors cursor-pointer shadow-sm"
+                         >
+                           Renovar 30D
+                         </button>
+                       )}
+
+                       {student.status !== 'suspended' && (
+                         <button 
+                           onClick={() => handleUpdateUserStatus(student.id, 'suspended')} 
+                           className="bg-red-50 text-red-600 text-xs font-bold px-3 py-2.5 rounded-xl hover:bg-red-100 transition-colors cursor-pointer shadow-sm"
+                         >
+                           Suspender
+                         </button>
+                       )}
+                     </div>
                   </div>
                 );
               })}
