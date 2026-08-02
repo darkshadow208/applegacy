@@ -109,13 +109,49 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
       if (error) throw error;
       
       if (newStatus === 'approved') {
+        const startDate = new Date().toISOString();
         const endDate = new Date();
         endDate.setDate(endDate.getDate() + 30);
-        await supabase.from('subscriptions').upsert({
+
+        const { data: existingSub } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        let subError;
+        if (existingSub) {
+          const { error } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              plan_name: 'Mensual VIP',
+              start_date: startDate,
+              end_date: endDate.toISOString()
+            })
+            .eq('id', existingSub.id);
+          subError = error;
+        } else {
+          const { error } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: userId,
+              status: 'active',
+              plan_name: 'Mensual VIP',
+              start_date: startDate,
+              end_date: endDate.toISOString()
+            });
+          subError = error;
+        }
+
+        if (subError) throw subError;
+
+        // Mandar notificación push al aprobar la cuenta
+        await supabase.from('notifications').insert({
           user_id: userId,
-          status: 'active',
-          plan_name: 'Mensual VIP',
-          end_date: endDate.toISOString()
+          title: '🎉 ¡Cuenta Aprobada!',
+          message: 'Bienvenido a Legacy Academy. Ya tienes acceso a todos los cursos VIP.',
+          is_read: false
         });
       }
 

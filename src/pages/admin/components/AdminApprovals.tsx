@@ -115,13 +115,36 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
         const endDate = new Date();
         endDate.setMonth(endDate.getMonth() + 1);
 
-        const { error: subError } = await supabase.from('subscriptions').upsert({
-          user_id: userId,
-          status: 'active',
-          plan_name: 'Mensual VIP',
-          start_date: startDate,
-          end_date: endDate.toISOString()
-        });
+        const { data: existingSub } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        let subError;
+        if (existingSub) {
+          const { error } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              plan_name: 'Mensual VIP',
+              start_date: startDate,
+              end_date: endDate.toISOString()
+            })
+            .eq('id', existingSub.id);
+          subError = error;
+        } else {
+          const { error } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: userId,
+              status: 'active',
+              plan_name: 'Mensual VIP',
+              start_date: startDate,
+              end_date: endDate.toISOString()
+            });
+          subError = error;
+        }
 
         if (subError) throw subError;
         
