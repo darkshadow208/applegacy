@@ -24,10 +24,18 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
         .eq('is_read', false);
 
       if (!error && data) {
+        // Consultar el perfil en la DB para sincronizar los arrays
+        const { data: profile } = await supabase
+          .from('users_profiles')
+          .select('deleted_global_notifs, read_global_notifs')
+          .eq('id', userId)
+          .maybeSingle();
+
         const cacheKeyDel = `deleted_global_notifs_${userId}`;
         const cacheKeyRead = `read_global_notifs_${userId}`;
-        const deletedGlobal = JSON.parse(localStorage.getItem(cacheKeyDel) || '[]');
-        const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+        
+        const deletedGlobal = profile?.deleted_global_notifs || JSON.parse(localStorage.getItem(cacheKeyDel) || '[]');
+        const readGlobal = profile?.read_global_notifs || JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
         
         const filteredData = data.filter((n: any) => 
           !(n.user_id === null && (deletedGlobal.includes(n.id) || readGlobal.includes(n.id)))

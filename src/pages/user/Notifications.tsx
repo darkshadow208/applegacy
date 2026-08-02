@@ -26,15 +26,23 @@ export function Notifications() {
         const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
         if (!error && data) {
+          // Consultar los estados sincronizados desde la DB
+          const { data: profile } = await supabase
+            .from('users_profiles')
+            .select('deleted_global_notifs, read_global_notifs')
+            .eq('id', user.id)
+            .maybeSingle();
+
           const cacheKeyDel = `deleted_global_notifs_${user.id}`;
           const cacheKeyRead = `read_global_notifs_${user.id}`;
-          const deletedGlobal = JSON.parse(localStorage.getItem(cacheKeyDel) || '[]');
-          const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
           
-          // Filter out global notifications that the user has cleared locally
+          const deletedGlobal = profile?.deleted_global_notifs || JSON.parse(localStorage.getItem(cacheKeyDel) || '[]');
+          const readGlobal = profile?.read_global_notifs || JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+          
+          // Filter out global notifications that the user has cleared locally or in DB
           const filteredData = data.filter((n: any) => !(n.user_id === null && deletedGlobal.includes(n.id)));
           
-          // Mark global notifications as read locally
+          // Mark global notifications as read locally or in DB
           const mappedData = filteredData.map((n: any) => 
             (n.user_id === null && readGlobal.includes(n.id)) ? { ...n, is_read: true } : n
           );
@@ -53,10 +61,29 @@ export function Notifications() {
   const markAsRead = async (id: string) => {
     const notif = notifications.find(n => n.id === id);
     if (notif && notif.user_id === null && user) {
+      // 1. Guardar localmente
       const cacheKeyRead = `read_global_notifs_${user.id}`;
-      const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
-      if (!readGlobal.includes(id)) {
-        localStorage.setItem(cacheKeyRead, JSON.stringify([...readGlobal, id]));
+      const readGlobalLocal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+      if (!readGlobalLocal.includes(id)) {
+        localStorage.setItem(cacheKeyRead, JSON.stringify([...readGlobalLocal, id]));
+      }
+
+      // 2. Sincronizar en DB
+      try {
+        const { data: profile } = await supabase
+          .from('users_profiles')
+          .select('read_global_notifs')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        const currentRead = profile?.read_global_notifs || [];
+        if (!currentRead.includes(id)) {
+          await supabase.from('users_profiles').update({
+            read_global_notifs: [...currentRead, id]
+          }).eq('id', user.id);
+        }
+      } catch (err) {
+        console.warn('Error al sincronizar lectura en DB:', err);
       }
     }
 
@@ -74,10 +101,26 @@ export function Notifications() {
   const markAllAsRead = async () => {
     const unreadGlobals = notifications.filter(n => n.user_id === null && !n.is_read).map(n => n.id);
     if (unreadGlobals.length > 0 && user) {
+      // Local
       const cacheKeyRead = `read_global_notifs_${user.id}`;
-      const readGlobal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
-      const newReads = Array.from(new Set([...readGlobal, ...unreadGlobals]));
-      localStorage.setItem(cacheKeyRead, JSON.stringify(newReads));
+      const readGlobalLocal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
+      const newReadsLocal = Array.from(new Set([...readGlobalLocal, ...unreadGlobals]));
+      localStorage.setItem(cacheKeyRead, JSON.stringify(newReadsLocal));
+
+      // DB
+      try {
+        const { data: profile } = await supabase
+          .from('users_profiles')
+          .select('read_global_notifs')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        const currentRead = profile?.read_global_notifs || [];
+        const newReads = Array.from(new Set([...currentRead, ...unreadGlobals]));
+        await supabase.from('users_profiles').update({ read_global_notifs: newReads }).eq('id', user.id);
+      } catch (err) {
+        console.warn('Error al marcar todas como leídas en DB:', err);
+      }
     }
 
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
@@ -95,13 +138,28 @@ export function Notifications() {
   };
 
   const clearAll = async () => {
-    
     // Identificar notificaciones globales para borrarlas localmente
     const globalIds = notifications.filter(n => n.user_id === null).map(n => n.id);
     if (globalIds.length > 0 && user) {
+      // Local
       const cacheKey = `deleted_global_notifs_${user.id}`;
-      const deletedGlobal = JSON.parse(localStorage.getItem(cacheKey) || '[]');
-      localStorage.setItem(cacheKey, JSON.stringify([...deletedGlobal, ...globalIds]));
+      const deletedGlobalLocal = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+      localStorage.setItem(cacheKey, JSON.stringify([...deletedGlobalLocal, ...globalIds]));
+
+      // DB
+      try {
+        const { data: profile } = await supabase
+          .from('users_profiles')
+          .select('deleted_global_notifs')
+          .eq('id', user.id)
+          .maybeSingle();
+        
+        const currentDeleted = profile?.deleted_global_notifs || [];
+        const newDeleted = Array.from(new Set([...currentDeleted, ...globalIds]));
+        await supabase.from('users_profiles').update({ deleted_global_notifs: newDeleted }).eq('id', user.id);
+      } catch (err) {
+        console.warn('Error al borrar notificaciones globales en DB:', err);
+      }
     }
 
     setNotifications([]);

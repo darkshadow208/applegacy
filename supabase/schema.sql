@@ -24,6 +24,8 @@ CREATE TABLE public.users_profiles (
   telegram VARCHAR(100),
   payment_receipt_url TEXT,
   avatar_url TEXT,
+  read_global_notifs UUID[] DEFAULT '{}'::uuid[],
+  deleted_global_notifs UUID[] DEFAULT '{}'::uuid[],
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
