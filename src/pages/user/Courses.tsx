@@ -25,6 +25,17 @@ export function Courses() {
   const [onlyLastTen, setOnlyLastTen] = useState(false);
 
   useEffect(() => {
+    // 1. Cargar caché inmediatamente para UI Optimista
+    const cached = localStorage.getItem('cached_courses');
+    if (cached) {
+      try {
+        setCourses(JSON.parse(cached));
+        setLoading(false);
+      } catch (err) {
+        console.warn('Error al parsear cursos en caché:', err);
+      }
+    }
+
     async function fetchCourses() {
       // Timeout de seguridad de 4 segundos
       const timeoutPromise = new Promise((resolve) => {
@@ -59,15 +70,17 @@ export function Courses() {
             created_at: item.created_at
           }));
           setCourses(mapped);
-          sessionStorage.setItem('cached_courses', JSON.stringify(mapped));
-        } else {
-          // Si no hay datos o falla, usar mock
+          localStorage.setItem('cached_courses', JSON.stringify(mapped));
+        } else if (!cached) {
+          // Solo usar mocks si no hay absolutamente nada en caché
           setCourses(mockCourses);
-          sessionStorage.setItem('cached_courses', JSON.stringify(mockCourses));
+          localStorage.setItem('cached_courses', JSON.stringify(mockCourses));
         }
       } catch (err) {
-        setCourses(mockCourses);
-        sessionStorage.setItem('cached_courses', JSON.stringify(mockCourses));
+        if (!cached) {
+          setCourses(mockCourses);
+          localStorage.setItem('cached_courses', JSON.stringify(mockCourses));
+        }
       } finally {
         setLoading(false);
       }

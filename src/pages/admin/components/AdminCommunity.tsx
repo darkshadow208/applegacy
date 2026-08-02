@@ -47,6 +47,22 @@ export function AdminCommunity({ showToast }: AdminCommunityProps) {
   const handleDeleteContribution = async (contId: string) => {
     if (!window.confirm('¿Seguro que quieres eliminar este aporte permanentemente?')) return;
     try {
+      // 1. Obtener la URL del archivo para ver si está en el Storage de Supabase
+      const { data: contData } = await supabase
+        .from('user_contributions')
+        .select('link_url')
+        .eq('id', contId)
+        .single();
+
+      if (contData?.link_url && contData.link_url.includes('/storage/v1/object/public/avatars/')) {
+        // Extraer la ruta relativa (ej: contributions/xxxx-xxxx.pdf)
+        const filePath = contData.link_url.split('/storage/v1/object/public/avatars/')[1];
+        if (filePath) {
+          await supabase.storage.from('avatars').remove([filePath]);
+        }
+      }
+
+      // 2. Eliminar de la base de datos
       const { error } = await supabase.from('user_contributions').delete().eq('id', contId);
       if (error) throw error;
 

@@ -3,13 +3,10 @@ ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bonuses ENABLE ROW LEVEL SECURITY;
 
 -- 2. Políticas de Seguridad (Cursos)
--- Los administradores pueden hacer todo
+-- Los administradores pueden hacer todo usando la función segura is_admin
 CREATE POLICY "Admins_all_courses" ON public.courses
   FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.users_profiles
-      WHERE users_profiles.id = auth.uid() AND users_profiles.role = 'admin'
-    )
+    public.is_admin(auth.uid())
   );
 
 -- Usuarios normales solo pueden ver cursos activos SI su suscripción está activa
@@ -25,13 +22,10 @@ CREATE POLICY "Users_view_active_courses_if_subscribed" ON public.courses
 
 
 -- 3. Políticas de Seguridad (Bonos)
--- Los administradores pueden hacer todo
+-- Los administradores pueden hacer todo usando la función segura is_admin
 CREATE POLICY "Admins_all_bonuses" ON public.bonuses
   FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.users_profiles
-      WHERE users_profiles.id = auth.uid() AND users_profiles.role = 'admin'
-    )
+    public.is_admin(auth.uid())
   );
 
 -- Usuarios normales solo pueden ver bonos activos y globales SI su suscripción está activa

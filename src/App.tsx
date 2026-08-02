@@ -66,7 +66,7 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
     return <Navigate to="/auth/login" state={{ from: location }} replace />;
   }
 
-  if (profile?.status === 'pending' && location.pathname !== '/auth/pending') {
+  if ((profile?.status === 'pending' || profile?.status === 'suspended') && location.pathname !== '/auth/pending') {
     return <Navigate to="/auth/pending" replace />;
   }
 

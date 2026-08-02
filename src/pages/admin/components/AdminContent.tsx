@@ -150,6 +150,8 @@ export function AdminContent({ showToast }: AdminContentProps) {
       if (error) throw error;
       showToast('✏️ Detalles del curso actualizados', 'success');
       setEditingCourseId(null);
+      setEditingCourseTitle('');
+      setEditingCourseDesc('');
       fetchCourses(pageCourses);
     } catch (err: any) {
       console.error(err);
@@ -214,6 +216,8 @@ export function AdminContent({ showToast }: AdminContentProps) {
       if (error) throw error;
       showToast('✏️ Detalles del bono actualizados', 'success');
       setEditingBonusId(null);
+      setEditingBonusTitle('');
+      setEditingBonusDesc('');
       fetchBonuses(pageBonuses);
     } catch (err: any) {
       console.error(err);
@@ -358,7 +362,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
                       <textarea rows={3} value={editingCourseDesc} onChange={e => setEditingCourseDesc(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold" />
                       <div className="flex gap-2 justify-end">
                         <button onClick={() => handleUpdateCourseDetails(course.id)} className="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Guardar</button>
-                        <button onClick={() => setEditingCourseId(null)} className="bg-gray-150 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Cancelar</button>
+                        <button onClick={() => { setEditingCourseId(null); setEditingCourseTitle(''); setEditingCourseDesc(''); }} className="bg-gray-150 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Cancelar</button>
                       </div>
                     </div>
                   ) : (
@@ -468,7 +472,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
                       <textarea rows={3} value={editingBonusDesc} onChange={e => setEditingBonusDesc(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold" />
                       <div className="flex gap-2 justify-end">
                         <button onClick={() => handleUpdateBonusDetails(bonus.id)} className="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Guardar</button>
-                        <button onClick={() => setEditingBonusId(null)} className="bg-gray-150 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Cancelar</button>
+                        <button onClick={() => { setEditingBonusId(null); setEditingBonusTitle(''); setEditingBonusDesc(''); }} className="bg-gray-150 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer">Cancelar</button>
                       </div>
                     </div>
                   ) : (
