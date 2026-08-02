@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from './supabase';
@@ -19,51 +20,119 @@ export const notificationService = {
   },
 
   async registerPushNotifications(userId: string) {
-    try {
-      let permStatus = await PushNotifications.checkPermissions();
-      if (permStatus.receive === 'prompt') {
-        permStatus = await PushNotifications.requestPermissions();
-      }
-
-      if (permStatus.receive !== 'granted') {
-        throw new Error('Push permissions not granted');
-      }
-
-      // Registers with Apple/Google
-      await PushNotifications.register();
-
-      // Listen for registration success
-      PushNotifications.addListener('registration', async (token) => {
-        console.log('Push registration success, token:', token.value);
-        // Save the FCM token to Supabase
-        await supabase
-          .from('users_profiles')
-          .update({ fcm_token: token.value })
-          .eq('id', userId);
-      });
-
-      // Listen for registration error
-      PushNotifications.addListener('registrationError', (error: any) => {
-        console.error('Push registration error:', error);
-      });
-
-      // Listen for push notifications received
-      PushNotifications.addListener('pushNotificationReceived', (notification) => {
-        console.log('Push received: ', notification);
-      });
-
-      // Listen for push notification click
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        console.log('Push action performed: ', notification);
-        const data = notification.notification.data;
-        if (data && data.url) {
-          // Despachar evento global para que UserLayout navegue
-          window.dispatchEvent(new CustomEvent('push-navigate', { detail: data.url }));
+    // --- NATIVE PLATFORM (ANDROID / IOS) ---
+    if (Capacitor.isNativePlatform()) {
+      try {
+        let permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'prompt') {
+          permStatus = await PushNotifications.requestPermissions();
         }
-      });
 
-    } catch (err) {
-      console.warn('PushNotifications not supported in this environment:', err);
+        if (permStatus.receive !== 'granted') {
+          throw new Error('Push permissions not granted');
+        }
+
+        // Registers with Apple/Google
+        await PushNotifications.register();
+
+        // Listen for registration success
+        PushNotifications.addListener('registration', async (token) => {
+          console.log('Push registration success, token:', token.value);
+          // Save the FCM token to Supabase
+          await supabase
+            .from('users_profiles')
+            .update({ fcm_token: token.value })
+            .eq('id', userId);
+        });
+
+        // Listen for registration error
+        PushNotifications.addListener('registrationError', (error: any) => {
+          console.error('Push registration error:', error);
+        });
+
+        // Listen for push notifications received
+        PushNotifications.addListener('pushNotificationReceived', (notification) => {
+          console.log('Push received: ', notification);
+        });
+
+        // Listen for push notification click
+        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+          console.log('Push action performed: ', notification);
+          const data = notification.notification.data;
+          if (data && data.url) {
+            // Despachar evento global para que UserLayout navegue
+            window.dispatchEvent(new CustomEvent('push-navigate', { detail: data.url }));
+          }
+        });
+
+      } catch (err) {
+        console.warn('PushNotifications not supported in this native environment:', err);
+      }
+    } 
+    // --- WEB / PWA PLATFORM (DESKTOP & SAFARI IOS 16.4+) ---
+    else {
+      try {
+        if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+          console.warn('Push notifications not supported on this browser.');
+          return;
+        }
+
+        // Solicitar permisos al navegador
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          console.log('Permisos de notificación web denegados.');
+          return;
+        }
+
+        // Obtener variables de Firebase
+        const firebaseConfig = {
+          apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+          authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+          projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+          storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+          messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+          appId: import.meta.env.VITE_FIREBASE_APP_ID
+        };
+
+        const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+        if (!firebaseConfig.apiKey || !firebaseConfig.messagingSenderId || !vapidKey) {
+          console.warn('Configuración de Firebase Web o VAPID Key faltante en variables de entorno. Omitiendo Web Push.');
+          return;
+        }
+
+        // Registrar Service Worker con credenciales dinámicas en la URL
+        const swParams = new URLSearchParams(firebaseConfig).toString();
+        const swUrl = `/firebase-messaging-sw.js?${swParams}`;
+        const registration = await navigator.serviceWorker.register(swUrl, { scope: '/' });
+
+        // Cargar SDK dinámicamente para no pesar en el bundle inicial
+        const { initializeApp } = await import('firebase/app');
+        const { getMessaging, getToken } = await import('firebase/messaging');
+
+        const app = initializeApp(firebaseConfig);
+        const messaging = getMessaging(app);
+
+        // Obtener token de FCM para Web
+        const token = await getToken(messaging, {
+          serviceWorkerRegistration: registration,
+          vapidKey: vapidKey
+        });
+
+        if (token) {
+          console.log('Web Push FCM token obtenido con éxito:', token);
+          // Guardar el token en Supabase
+          await supabase
+            .from('users_profiles')
+            .update({ fcm_token: token })
+            .eq('id', userId);
+        } else {
+          console.warn('No se pudo obtener el token Web Push de FCM.');
+        }
+
+      } catch (err) {
+        console.warn('Error al registrar Web Push:', err);
+      }
     }
   },
 
