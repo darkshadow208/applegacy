@@ -416,14 +416,32 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
                           ) : (
                             <div className="flex flex-col gap-1.5 max-h-[160px] overflow-y-auto">
                               {userPaymentsHistory.map(p => (
-                                <div key={p.id} className="bg-white p-2 rounded-xl border border-gray-150 flex flex-col gap-1">
-                                  <div className="flex justify-between items-center text-[10px]">
-                                    <span className="font-extrabold text-gray-900">${p.amount} USD</span>
-                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
-                                      p.status === 'approved' ? 'bg-green-100 text-green-700' : p.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                                    }`}>{p.status === 'approved' ? 'Aprobado' : p.status === 'rejected' ? 'Rechazado' : 'Pendiente'}</span>
+                                <div key={p.id} className="bg-white p-2.5 rounded-xl border border-gray-150 flex items-center justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] font-extrabold text-gray-900">
+                                      {p.payment_date ? new Date(p.payment_date + 'T12:00:00').toLocaleDateString() : 'N/A'}
+                                    </span>
+                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full w-max ${
+                                      p.status === 'approved' ? 'bg-green-50 text-green-700' : p.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
+                                    }`}>
+                                      {p.status === 'approved' ? 'Aprobado' : p.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
+                                    </span>
                                   </div>
-                                  <p className="text-[9px] text-gray-500">{p.payment_date ? new Date(p.payment_date + 'T12:00:00').toLocaleDateString() : 'N/A'}</p>
+                                  
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-gray-950">${p.amount} USD</span>
+                                    {p.receipt_url && (
+                                      <a 
+                                        href={p.receipt_url} 
+                                        target="_blank" 
+                                        rel="noreferrer" 
+                                        className="text-indigo-600 hover:text-indigo-800 p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors cursor-pointer"
+                                        title="Ver Comprobante"
+                                      >
+                                        <FileText size={12} />
+                                      </a>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>

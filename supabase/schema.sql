@@ -166,6 +166,19 @@ BEGIN
     END,
     new.raw_user_meta_data->>'payment_receipt_url'
   );
+
+  -- Create initial pending payment record for auditing history
+  IF new.raw_user_meta_data->>'payment_receipt_url' IS NOT NULL THEN
+    INSERT INTO public.payments (user_id, amount, payment_date, receipt_url, notes, status)
+    VALUES (
+      new.id,
+      0.00,
+      CURRENT_DATE,
+      new.raw_user_meta_data->>'payment_receipt_url',
+      'Comprobante de registro inicial',
+      'pending'
+    );
+  END IF;
   
   RETURN new;
 END;
