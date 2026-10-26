@@ -51,8 +51,11 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
         .neq('role', 'admin') // No listar admins aquí usualmente
         .order('created_at', { ascending: false });
 
-      if (searchQuery) {
-        query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+      if (searchQuery.trim()) {
+        const cleanQuery = searchQuery.replace(/[(),%]/g, '').trim();
+        if (cleanQuery) {
+          query = query.or(`full_name.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%`);
+        }
       }
 
       // Pagination

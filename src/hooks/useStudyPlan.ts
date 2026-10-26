@@ -59,10 +59,12 @@ export function useStudyPlan(userId: string | undefined) {
         if (goalsRes.data) setGoals(goalsRes.data);
         if (tasksRes.data) setTasks(tasksRes.data);
         if (habitsRes.data) {
-          // Process habits for 24h reset
-          const today = new Date().toISOString().split('T')[0];
-          const yesterdayDate = new Date(Date.now() - 86400000);
-          const yesterday = yesterdayDate.toISOString().split('T')[0];
+          // Process habits for 24h reset using local date strings
+          const getLocalDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const today = getLocalDate(new Date());
+          const yDate = new Date();
+          yDate.setDate(yDate.getDate() - 1);
+          const yesterday = getLocalDate(yDate);
 
           let habitsChanged = false;
           const processedHabits = habitsRes.data.map((h: any) => {

@@ -118,15 +118,21 @@ function App() {
             // Filter if it's for this user or global
             if (newNotif && (newNotif.user_id === null || newNotif.user_id === session.user.id)) {
               const notifiedIdsKey = `notified_notification_ids_${session.user.id}`;
-              const notifiedIdsSaved = localStorage.getItem(notifiedIdsKey) || '[]';
-              const notifiedIds: string[] = JSON.parse(notifiedIdsSaved);
+              let notifiedIds: string[] = [];
+              try {
+                notifiedIds = JSON.parse(localStorage.getItem(notifiedIdsKey) || '[]');
+                if (!Array.isArray(notifiedIds)) notifiedIds = [];
+              } catch {
+                notifiedIds = [];
+              }
 
               if (!notifiedIds.includes(newNotif.id)) {
                 // Schedule local notification immediately
                 await notificationService.schedule(newNotif.title, newNotif.message);
                 
-                // Add to notified local storage
+                // Add to notified local storage (capped to last 100 to prevent bloat)
                 notifiedIds.push(newNotif.id);
+                if (notifiedIds.length > 100) notifiedIds = notifiedIds.slice(-100);
                 localStorage.setItem(notifiedIdsKey, JSON.stringify(notifiedIds));
                 
                 // Increment unread count in store

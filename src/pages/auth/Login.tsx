@@ -33,6 +33,25 @@ export function Login() {
     }
   };
 
+  const handleResetPassword = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setError('Por favor escribe tu correo electrónico arriba para enviarte el enlace de recuperación.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (resetErr) throw resetErr;
+      alert(`Hemos enviado un enlace de recuperación a ${email.trim()}. Revisa tu bandeja de entrada o spam.`);
+    } catch (err: any) {
+      setError(err.message || 'Error al enviar correo de recuperación.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <form className="flex flex-col gap-5" onSubmit={handleLogin}>
       {error && (
@@ -75,7 +94,9 @@ export function Login() {
             />
           </div>
           <div className="flex justify-end mt-1.5">
-            <a href="#" className="text-xs text-gray-500 hover:text-black transition-colors font-medium">¿Olvidaste tu contraseña?</a>
+            <button type="button" onClick={handleResetPassword} className="text-xs text-gray-500 hover:text-black transition-colors font-medium cursor-pointer">
+              ¿Olvidaste tu contraseña?
+            </button>
           </div>
         </div>
       </div>

@@ -21,6 +21,8 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+let authListenerRegistered = false;
+
 export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   user: null,
@@ -37,26 +39,29 @@ export const useAuthStore = create<AuthState>((set) => ({
           .from('users_profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
 
         set({ session, user: session.user, profile, loading: false });
       } else {
         set({ session: null, user: null, profile: null, loading: false });
       }
 
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (session?.user) {
-          const { data: profile } = await supabase
-            .from('users_profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          set({ session, user: session.user, profile, loading: false });
-        } else {
-          set({ session: null, user: null, profile: null, loading: false });
-        }
-      });
+      // Listen for auth changes only once
+      if (!authListenerRegistered) {
+        authListenerRegistered = true;
+        supabase.auth.onAuthStateChange(async (_event, session) => {
+          if (session?.user) {
+            const { data: profile } = await supabase
+              .from('users_profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            set({ session, user: session.user, profile, loading: false });
+          } else {
+            set({ session: null, user: null, profile: null, loading: false });
+          }
+        });
+      }
     } catch (error) {
       console.error('Error initializing auth:', error);
       set({ loading: false });

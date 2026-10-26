@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { notificationService } from '../../lib/notifications';
 import { useStudyPlan } from '../../hooks/useStudyPlan';
+
+const DEFAULT_REMINDER_TIMES = ['09:00', '18:00'];
 
 
 
@@ -72,7 +74,9 @@ export function StudyPlan() {
   const [newGoalPeriod, setNewGoalPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [newTaskText, setNewTaskText] = useState('');
   const [newHabitText, setNewHabitText] = useState('');
-  const reminderTimes: string[] = (studyProfile as any)?.reminder_times || ['09:00', '18:00'];
+  const reminderTimes: string[] = useMemo(() => {
+    return (studyProfile as any)?.reminder_times || DEFAULT_REMINDER_TIMES;
+  }, [(studyProfile as any)?.reminder_times]);
   const [newReminderTime, setNewReminderTime] = useState('18:00');
   const [newScheduleDay, setNewScheduleDay] = useState('Lunes');
   const [newScheduleTime, setNewScheduleTime] = useState('18:00');
@@ -209,6 +213,8 @@ export function StudyPlan() {
     if (updatedCompleted) {
       awardXP(100);
       console.log('🎯 ¡Meta lograda! +100 XP');
+    } else {
+      awardXP(-100);
     }
   };
 
@@ -281,6 +287,8 @@ export function StudyPlan() {
     if (updatedCompleted) {
       awardXP(10);
       console.log('✅ Tarea completada +10 XP');
+    } else {
+      awardXP(-10);
     }
   };
 
@@ -302,16 +310,19 @@ export function StudyPlan() {
   const handleToggleHabit = async (id: string) => {
     const habit = habits.find(h => h.id === id);
     if (!habit) return;
-    const today = new Date().toISOString().split('T')[0];
-    const completed_today = !habit.completed_today && !habit.completed_today; // Handle both camelCase and snake_case from DB
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const completed_today = !habit.completed_today;
     const newStreak = completed_today ? (habit.streak || 0) + 1 : Math.max(0, (habit.streak || 0) - 1);
     
     setHabits(habits.map(h => h.id === id ? { ...h, completed_today, streak: newStreak, last_completed_date: completed_today ? today : h.last_completed_date } : h));
     
-    await supabase.from('study_habits').update({ completed_today: completed_today, streak: newStreak, last_completed_date: completed_today ? today : habit.last_completed_date }).eq('id', id);
+    await supabase.from('study_habits').update({ completed_today, streak: newStreak, last_completed_date: completed_today ? today : habit.last_completed_date }).eq('id', id);
     if (completed_today) {
       awardXP(50);
       console.log('🔥 ¡Hábito cumplido! +50 XP y racha mantenida');
+    } else {
+      awardXP(-50);
     }
   };
 

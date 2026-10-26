@@ -27,12 +27,12 @@ export function Subscription() {
     async function fetchData() {
       if (!user) return;
       try {
-        // Fetch subscription
+        // Fetch subscription safely
         const { data: subData } = await supabase
           .from('subscriptions')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
         if (subData) setSubscription(subData);
 
         // Fetch payments
@@ -56,9 +56,18 @@ export function Subscription() {
     e.preventDefault();
     if (!user || !file || !amount || !paymentDate) return;
     
+    if (file.size > 5 * 1024 * 1024) {
+      alert('El archivo no debe superar los 5MB.');
+      return;
+    }
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    if (!fileExt || !['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(fileExt)) {
+      alert('Formato no permitido. Solo se aceptan imágenes (JPG, PNG, WEBP) o documentos PDF.');
+      return;
+    }
+
     try {
       setUploading(true);
-      const fileExt = file.name.split('.').pop();
       const filePath = `${user.id}-${Date.now()}.${fileExt}`;
 
       // Upload file

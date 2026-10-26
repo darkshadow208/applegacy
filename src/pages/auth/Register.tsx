@@ -22,13 +22,23 @@ export function Register() {
       setError('Por favor sube tu comprobante de pago.');
       return;
     }
+
+    if (receipt.size > 5 * 1024 * 1024) {
+      setError('El comprobante no debe superar los 5MB.');
+      return;
+    }
+
+    const fileExt = receipt.name.split('.').pop()?.toLowerCase();
+    if (!fileExt || !['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(fileExt)) {
+      setError('Formato no permitido. Solo se aceptan imágenes (JPG, PNG, WEBP) o documentos PDF.');
+      return;
+    }
     
     setLoading(true);
     setError('');
 
     try {
       // 1. Upload receipt
-      const fileExt = receipt.name.split('.').pop();
       const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 

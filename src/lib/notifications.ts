@@ -38,11 +38,21 @@ export const notificationService = {
         // Listen for registration success
         PushNotifications.addListener('registration', async (token) => {
           console.log('Push registration success, token:', token.value);
-          // Save the FCM token to Supabase
+          // Save the FCM token to Supabase profile and user_push_devices
           await supabase
             .from('users_profiles')
             .update({ fcm_token: token.value })
             .eq('id', userId);
+
+          try {
+            await supabase.from('user_push_devices').upsert({
+              user_id: userId,
+              fcm_token: token.value,
+              platform: 'native'
+            }, { onConflict: 'user_id,fcm_token' });
+          } catch {
+            // Silently ignore if table not created yet
+          }
         });
 
         // Listen for registration error
@@ -121,11 +131,21 @@ export const notificationService = {
 
         if (token) {
           console.log('Web Push FCM token obtenido con éxito:', token);
-          // Guardar el token en Supabase
+          // Guardar el token en Supabase profile y user_push_devices
           await supabase
             .from('users_profiles')
             .update({ fcm_token: token })
             .eq('id', userId);
+
+          try {
+            await supabase.from('user_push_devices').upsert({
+              user_id: userId,
+              fcm_token: token,
+              platform: 'web'
+            }, { onConflict: 'user_id,fcm_token' });
+          } catch {
+            // Silently ignore if table not created yet
+          }
         } else {
           console.warn('No se pudo obtener el token Web Push de FCM.');
         }
@@ -163,8 +183,8 @@ export const notificationService = {
       const hasPermission = await this.requestPermissions();
       if (!hasPermission) return;
 
-      // Web Fallback for Desktop Notifications
-      if (typeof window !== 'undefined' && 'Notification' in window) {
+      // Web Fallback for Desktop Notifications (only in non-native browser)
+      if (!Capacitor.isNativePlatform() && typeof window !== 'undefined' && 'Notification' in window) {
         if ((window as any).webReminderInterval) clearInterval((window as any).webReminderInterval);
         
         if (times.length > 0) {
@@ -220,6 +240,18 @@ export const notificationService = {
       await LocalNotifications.schedule({ notifications });
     } catch (err) {
       console.warn('LocalNotifications scheduleDailyReminders failed:', err);
+    }
+  },
+
+  async cancelExpirationNotifications() {
+    try {
+      const pending = await LocalNotifications.getPending();
+      const expirationNotifs = pending.notifications.filter(n => n.id >= 1000 && n.id < 2000);
+      if (expirationNotifs.length > 0) {
+        await LocalNotifications.cancel({ notifications: expirationNotifs });
+      }
+    } catch (err) {
+      console.warn('LocalNotifications cancelExpirationNotifications failed:', err);
     }
   },
 
@@ -281,8 +313,8 @@ export const notificationService = {
         }
 
         if (expiringSubs && expiringSubs.length > 0) {
-          // Clear previous admin notifications to avoid clutter
-          await this.clearAll();
+          // Clear previous admin expiration notifications to avoid clutter
+          await this.cancelExpirationNotifications();
           
           for (const sub of expiringSubs) {
             const studentName = (sub.users_profiles as any)?.full_name || 'Un estudiante';
@@ -321,7 +353,7 @@ export const notificationService = {
           return;
         }
 
-        await this.clearAll();
+        await this.cancelExpirationNotifications();
 
         const endDate = new Date(subscription.end_date);
         const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));

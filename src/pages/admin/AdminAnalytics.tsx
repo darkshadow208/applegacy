@@ -20,14 +20,23 @@ export function AdminAnalytics() {
     async function loadAnalytics() {
       setLoading(true);
       try {
-        // Fetch users
-        const { data: users, error: usersErr } = await supabase.from('users_profiles').select('created_at, status');
-        if (!usersErr && users) {
-          setStats(s => ({ ...s, totalUsers: users.length }));
-          
-          // Group by month for chart
+        // Fetch exact counts with minimal bandwidth and no 1000-row cap
+        const [usersCountRes, usersGrowthRes, subsCountRes, contsCountRes] = await Promise.all([
+          supabase.from('users_profiles').select('*', { count: 'exact', head: true }),
+          supabase.from('users_profiles').select('created_at').order('created_at', { ascending: false }).limit(1000),
+          supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.from('user_contributions').select('*', { count: 'exact', head: true }).eq('status', 'approved')
+        ]);
+
+        setStats({
+          totalUsers: usersCountRes.count || 0,
+          activeSubscriptions: subsCountRes.count || 0,
+          totalContributions: contsCountRes.count || 0
+        });
+
+        if (usersGrowthRes.data) {
           const growthMap: Record<string, number> = {};
-          users.forEach(u => {
+          usersGrowthRes.data.forEach(u => {
             const date = new Date(u.created_at);
             const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             growthMap[monthYear] = (growthMap[monthYear] || 0) + 1;
@@ -38,20 +47,6 @@ export function AdminAnalytics() {
             .sort((a, b) => a.name.localeCompare(b.name));
             
           setUserGrowth(growthData);
-        }
-
-        // Fetch subscriptions
-        const { data: subs, error: subsErr } = await supabase.from('subscriptions').select('status');
-        if (!subsErr && subs) {
-          const active = subs.filter(s => s.status === 'active').length;
-          setStats(s => ({ ...s, activeSubscriptions: active }));
-        }
-
-        // Fetch contributions
-        const { data: conts, error: contsErr } = await supabase.from('user_contributions').select('status');
-        if (!contsErr && conts) {
-          const approved = conts.filter(c => c.status === 'approved').length;
-          setStats(s => ({ ...s, totalContributions: approved }));
         }
       } catch (err) {
         console.error('Error loading analytics', err);

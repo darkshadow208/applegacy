@@ -271,6 +271,28 @@ export function CourseDetail() {
     }
   };
 
+  const handleShare = async () => {
+    if (!course) return;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: course.title,
+          text: `Mira este curso en Legacy Academy: ${course.title}`,
+          url: window.location.href,
+        });
+      } catch {
+        // User cancelled share
+      }
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('¡Enlace del curso copiado al portapapeles!');
+      } catch {
+        // Clipboard failed
+      }
+    }
+  };
+
   if (loading || !course) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -337,7 +359,11 @@ export function CourseDetail() {
             <Play size={20} fill="currentColor" />
             Acceder al Curso
           </a>
-          <button className="w-14 h-14 bg-white rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors">
+          <button 
+            onClick={handleShare}
+            aria-label="Compartir curso"
+            className="w-14 h-14 bg-white rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors cursor-pointer"
+          >
             <Share2 size={20} />
           </button>
         </div>

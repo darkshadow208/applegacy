@@ -76,12 +76,8 @@ export function Contribute() {
       setUploadedUrl(publicUrl);
       setLinkUrl(publicUrl);
     } catch (err: any) {
-      console.warn('Fallo de subida de archivo (Timeout/CORS/Bucket no creado), usando enlace temporal de prueba:', err);
-      // Usar URL de prueba para no bloquear el testeo
-      const mockUrl = 'https://drive.google.com/file/d/ejemplo-archivo-prueba/view';
-      setUploadedUrl(mockUrl);
-      setLinkUrl(mockUrl);
-      alert('Nota de Prueba: Subida en la nube demorada o bucket no inicializado. Hemos creado un enlace temporal de prueba para tu aporte.');
+      console.error('Fallo de subida de archivo:', err);
+      alert(`Error al subir archivo: ${err.message || 'Tiempo de espera agotado'}. Por favor intenta de nuevo.`);
     } finally {
       setUploadingFile(false);
     }
@@ -102,9 +98,9 @@ export function Contribute() {
       finalDescription = `${description}\n\n${stepsFormatted}`;
     }
 
-    // Timeout de 4 segundos
+    // Timeout de 6 segundos
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Tiempo de espera agotado.')), 4000)
+      setTimeout(() => reject(new Error('Tiempo de espera agotado.')), 6000)
     );
 
     try {
@@ -135,15 +131,16 @@ export function Contribute() {
             is_read: false
           });
         } else {
-          // Si es usuario, notificar al admin para que lo revise
-          const { data: adminData } = await supabase.from('users_profiles').select('id').eq('role', 'admin').limit(1).single();
-          if (adminData) {
-            await supabase.from('notifications').insert({
-              user_id: adminData.id,
+          // Si es usuario, notificar a todos los administradores
+          const { data: admins } = await supabase.from('users_profiles').select('id').eq('role', 'admin');
+          if (admins && admins.length > 0) {
+            const notifs = admins.map(a => ({
+              user_id: a.id,
               title: '📝 Nuevo Aporte Pendiente',
               message: `${profile?.full_name || 'Un usuario'} ha enviado un nuevo recurso: "${title}". Revísalo en el panel de administrador.`,
               is_read: false
-            });
+            }));
+            await supabase.from('notifications').insert(notifs);
           }
         }
       } catch (notifErr) {
@@ -152,9 +149,8 @@ export function Contribute() {
 
       setSuccess(true);
     } catch (err: any) {
-      console.warn('Fallo al guardar aporte real en DB, simulando éxito para pruebas locales:', err);
-      // Simular éxito para pruebas
-      setSuccess(true);
+      console.error('Error al guardar aporte en DB:', err);
+      alert(`Error al guardar el aporte: ${err.message || 'Error de conexión'}. Intenta de nuevo.`);
     } finally {
       setLoading(false);
     }

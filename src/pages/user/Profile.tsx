@@ -97,6 +97,10 @@ export function Profile() {
       if (password.trim().length >= 6) {
         await supabase.auth.updateUser({ password });
         setPassword('');
+      } else if (password.trim().length > 0) {
+        alert('La nueva contraseña debe tener al menos 6 caracteres.');
+        setLoading(false);
+        return;
       }
 
       setSuccessMsg('Perfil actualizado correctamente.');

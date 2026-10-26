@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
 
@@ -87,20 +87,28 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
     setLoading(false);
   };
 
+  const isFirstMount = useRef(true);
+
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (isFirstMount.current) return;
     fetchPendingUsers(pageUsers);
   }, [pageUsers]);
 
   useEffect(() => {
+    if (isFirstMount.current) return;
     fetchPendingPayments(pagePayments);
   }, [pagePayments]);
 
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     fetchPendingContributions(pageContributions);
   }, [pageContributions]);
 
@@ -170,12 +178,22 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
       if (error) throw error;
 
       if (newStatus === 'approved') {
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 1);
+        // Consultar suscripción actual para no recortar días restantes
+        const { data: currentSub } = await supabase
+          .from('subscriptions')
+          .select('end_date')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        const now = new Date();
+        const currentEndDate = currentSub?.end_date ? new Date(currentSub.end_date) : null;
+        // Si aún está activa y vigente, sumamos 30 días a su fecha de corte actual
+        const baseDate = (currentEndDate && currentEndDate > now) ? currentEndDate : now;
+        const newEndDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
         await supabase.from('subscriptions').update({
           status: 'active',
-          end_date: endDate.toISOString()
+          end_date: newEndDate.toISOString()
         }).eq('user_id', userId);
 
         await supabase.from('notifications').insert({
