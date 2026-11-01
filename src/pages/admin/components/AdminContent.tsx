@@ -123,12 +123,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
 
       if (error) throw error;
 
-      await supabase.from('notifications').insert({
-        user_id: null,
-        title: '🚀 ¡Nuevo Curso Disponible!',
-        message: `Se ha publicado el curso "${courseTitle}". ¡Ve a revisarlo!`,
-        is_read: false
-      });
+      // El trigger publica el aviso en la misma transacción.
 
       showToast('🎉 ¡Curso publicado exitosamente!', 'success');
       setCourseTitle(''); setCourseDesc(''); setCourseDriveUrl(''); setCourseImageUrl(''); setCourseCategory('');
@@ -145,7 +140,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
       const { error } = await supabase.from('courses').update({
         title: editingCourseTitle,
         description: editingCourseDesc
-      }).eq('id', courseId);
+      }).eq('id', courseId).select('id').single();
 
       if (error) throw error;
       showToast('✏️ Detalles del curso actualizados', 'success');
@@ -161,7 +156,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
 
   const handleToggleCourseActive = async (courseId: string, currentActive: boolean) => {
     try {
-      const { error } = await supabase.from('courses').update({ is_active: !currentActive }).eq('id', courseId);
+      const { error } = await supabase.from('courses').update({ is_active: !currentActive }).eq('id', courseId).select('id').single();
       if (error) throw error;
       
       showToast(currentActive ? '⏸️ Curso pausado' : '▶️ Curso reactivado', 'success');
@@ -189,12 +184,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
 
       if (error) throw error;
 
-      await supabase.from('notifications').insert({
-        user_id: null,
-        title: '🎁 ¡Nuevo Bono VIP!',
-        message: `Hemos añadido un nuevo recurso a la bóveda: "${bonusTitle}". ¡Disfrútalo!`,
-        is_read: false
-      });
+      // El trigger publica el aviso en la misma transacción.
 
       showToast('🎁 ¡Bono publicado en el catálogo!', 'success');
       setBonusTitle(''); setBonusDesc(''); setBonusDriveUrl('');
@@ -211,7 +201,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
       const { error } = await supabase.from('bonuses').update({
         title: editingBonusTitle,
         description: editingBonusDesc
-      }).eq('id', bonusId);
+      }).eq('id', bonusId).select('id').single();
 
       if (error) throw error;
       showToast('✏️ Detalles del bono actualizados', 'success');
@@ -227,7 +217,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
 
   const handleToggleBonusActive = async (bonusId: string, currentActive: boolean) => {
     try {
-      const { error } = await supabase.from('bonuses').update({ is_active: !currentActive }).eq('id', bonusId);
+      const { error } = await supabase.from('bonuses').update({ is_active: !currentActive }).eq('id', bonusId).select('id').single();
       if (error) throw error;
       
       showToast(currentActive ? '⏸️ Bono pausado' : '▶️ Bono reactivado', 'success');
@@ -262,7 +252,7 @@ export function AdminContent({ showToast }: AdminContentProps) {
   const handleDeleteCategory = async (catId: string) => {
     if (!window.confirm('¿Eliminar esta categoría?')) return;
     try {
-      const { error } = await supabase.from('course_categories').delete().eq('id', catId);
+      const { error } = await supabase.from('course_categories').delete().eq('id', catId).select('id').single();
       if (error) throw error;
       showToast('Categoría eliminada', 'success');
       fetchCategories();

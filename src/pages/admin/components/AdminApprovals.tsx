@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
+import { signedReceiptUrl, receiptPath } from '../../../lib/receipts';
+import { errorMessage } from '../../../lib/errors';
 import { supabase } from '../../../lib/supabase';
 import { Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
 
@@ -24,6 +26,7 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
 
   const [loading, setLoading] = useState(true);
   const [activeReceiptModalUrl, setActiveReceiptModalUrl] = useState<string | null>(null);
+  const [receiptIsPdf, setReceiptIsPdf] = useState(false);
 
   // --- FETCHERS ---
   const fetchPendingUsers = async (page: number) => {
@@ -49,6 +52,7 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
         .from('payments')
         .select(`*, users_profiles(email, full_name)`, { count: 'exact' })
         .eq('status', 'pending')
+        .eq('purpose', 'renewal')
         .order('created_at', { ascending: false })
         .range((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE - 1);
 
@@ -113,146 +117,47 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
   }, [pageContributions]);
 
   // --- ACTIONS ---
+  const [processing, setProcessing] = useState(false);
+  const openReceipt = async (path: string) => {
+    try {
+      const url = await signedReceiptUrl(path);
+      setReceiptIsPdf(/\.pdf$/i.test(receiptPath(path)));
+      setActiveReceiptModalUrl(url);
+    }
+    catch (error) { showToast(errorMessage(error), 'error'); }
+  };
+
   const handleUpdateUserStatus = async (userId: string, newStatus: 'approved' | 'suspended') => {
+    if (processing) return;
+    setProcessing(true);
     try {
-      const { error } = await supabase.from('users_profiles').update({ status: newStatus }).eq('id', userId);
-      if (error) throw error;
-
-      if (newStatus === 'approved') {
-        const startDate = new Date().toISOString();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 1);
-
-        const { data: existingSub } = await supabase
-          .from('subscriptions')
-          .select('id')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        let subError;
-        if (existingSub) {
-          const { error } = await supabase
-            .from('subscriptions')
-            .update({
-              status: 'active',
-              plan_name: 'Mensual VIP',
-              start_date: startDate,
-              end_date: endDate.toISOString()
-            })
-            .eq('id', existingSub.id);
-          subError = error;
-        } else {
-          const { error } = await supabase
-            .from('subscriptions')
-            .insert({
-              user_id: userId,
-              status: 'active',
-              plan_name: 'Mensual VIP',
-              start_date: startDate,
-              end_date: endDate.toISOString()
-            });
-          subError = error;
-        }
-
-        if (subError) throw subError;
-        
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          title: '🎉 ¡Cuenta Aprobada!',
-          message: 'Bienvenido a Legacy Academy. Ya tienes acceso a todos los cursos VIP.',
-          is_read: false
-        });
-      }
-
-      showToast(`Usuario ${newStatus === 'approved' ? 'Aprobado' : 'Rechazado'} exitosamente.`, 'success');
-      fetchPendingUsers(pageUsers);
-    } catch (err: any) {
-      console.error(err);
-      showToast('Error al actualizar usuario.', 'error');
-    }
+      await supabase.rpc('admin_set_user_status', { p_user_id: userId, p_status: newStatus }).throwOnError();
+      showToast(newStatus === 'approved' ? 'Cuenta aprobada y membresía activada.' : 'Cuenta suspendida.', 'success');
+      await loadAll();
+    } catch (error) { showToast(errorMessage(error), 'error'); }
+    finally { setProcessing(false); }
   };
 
-  const handleReviewPayment = async (payId: string, userId: string, newStatus: 'approved' | 'rejected') => {
+  const handleReviewPayment = async (payId: string, _userId: string, newStatus: 'approved' | 'rejected') => {
+    if (processing) return;
+    setProcessing(true);
     try {
-      const { error } = await supabase.from('payments').update({ status: newStatus }).eq('id', payId);
-      if (error) throw error;
-
-      if (newStatus === 'approved') {
-        // Consultar suscripción actual para no recortar días restantes
-        const { data: currentSub } = await supabase
-          .from('subscriptions')
-          .select('end_date')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        const now = new Date();
-        const currentEndDate = currentSub?.end_date ? new Date(currentSub.end_date) : null;
-        // Si aún está activa y vigente, sumamos 30 días a su fecha de corte actual
-        const baseDate = (currentEndDate && currentEndDate > now) ? currentEndDate : now;
-        const newEndDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-        await supabase.from('subscriptions').update({
-          status: 'active',
-          end_date: newEndDate.toISOString()
-        }).eq('user_id', userId);
-
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          title: '✅ Pago Aprobado',
-          message: 'Tu renovación ha sido aprobada. ¡Sigues siendo VIP!',
-          is_read: false
-        });
-      } else if (newStatus === 'rejected') {
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          title: '❌ Pago Rechazado',
-          message: 'Tu comprobante de pago ha sido rechazado. Por favor, verifica la imagen y vuelve a enviarla.',
-          is_read: false
-        });
-      }
-
-      showToast(`Pago ${newStatus === 'approved' ? 'aprobado' : 'rechazado'}.`, 'success');
-      fetchPendingPayments(pagePayments);
-    } catch (err) {
-      console.error(err);
-      showToast('Error al procesar el pago.', 'error');
-    }
+      await supabase.rpc('admin_review_payment', { p_payment_id: payId, p_status: newStatus }).throwOnError();
+      showToast(newStatus === 'approved' ? 'Renovación aprobada.' : 'Comprobante rechazado.', 'success');
+      await fetchPendingPayments(pagePayments);
+    } catch (error) { showToast(errorMessage(error), 'error'); }
+    finally { setProcessing(false); }
   };
 
-  const handleReviewContribution = async (contId: string, contUserId: string, contTitle: string, newStatus: 'approved' | 'rejected') => {
+  const handleReviewContribution = async (contId: string, _contUserId: string, _contTitle: string, newStatus: 'approved' | 'rejected') => {
+    if (processing) return;
+    setProcessing(true);
     try {
-      const { error } = await supabase.from('user_contributions').update({ status: newStatus }).eq('id', contId);
-      if (error) throw error;
-
-      if (newStatus === 'approved') {
-        await supabase.from('notifications').insert({
-          user_id: null,
-          title: '🌟 Nuevo Aporte en la Comunidad',
-          message: `Se ha publicado un nuevo aporte: "${contTitle}". ¡Ve a revisarlo!`,
-          is_read: false
-        });
-        
-        await supabase.from('notifications').insert({
-          user_id: contUserId,
-          title: '✅ Aporte Aprobado',
-          message: `Tu aporte "${contTitle}" ha sido aprobado y ya es público para toda la comunidad. ¡Gracias!`,
-          is_read: false
-        });
-      } else if (newStatus === 'rejected') {
-        await supabase.from('notifications').insert({
-          user_id: contUserId,
-          title: '❌ Aporte Rechazado',
-          message: `Lo sentimos, tu aporte "${contTitle}" no cumple con los lineamientos y ha sido rechazado.`,
-          is_read: false
-        });
-      }
-
-      showToast(`Aporte ${newStatus === 'approved' ? 'aprobado' : 'rechazado'}.`, 'success');
-      fetchPendingContributions(pageContributions);
-    } catch (err: any) {
-      console.error(err);
-      showToast('Error al revisar el aporte.', 'error');
-    }
+      await supabase.rpc('admin_review_contribution', { p_id: contId, p_status: newStatus }).throwOnError();
+      showToast(newStatus === 'approved' ? 'Aporte aprobado.' : 'Aporte rechazado.', 'success');
+      await fetchPendingContributions(pageContributions);
+    } catch (error) { showToast(errorMessage(error), 'error'); }
+    finally { setProcessing(false); }
   };
 
   // --- PAGINATION COMPONENT ---
@@ -315,7 +220,7 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
                   {user.payment_receipt_url && (
                     <div className="flex-shrink-0">
                       <button 
-                        onClick={() => setActiveReceiptModalUrl(user.payment_receipt_url)}
+                        onClick={() => openReceipt(user.payment_receipt_url)}
                         className="flex items-center gap-2 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl hover:bg-indigo-100 transition-colors cursor-pointer"
                       >
                         <ImageIcon size={14} /> Ver Comprobante
@@ -325,13 +230,13 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
 
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => handleUpdateUserStatus(user.id, 'approved')}
+                      disabled={processing} onClick={() => handleUpdateUserStatus(user.id, 'approved')}
                       className="bg-green-600 hover:bg-green-700 text-white p-2.5 rounded-xl transition-transform hover:scale-105 shadow-sm cursor-pointer" title="Aprobar Ingreso"
                     >
                       <Check size={18} />
                     </button>
                     <button 
-                      onClick={() => handleUpdateUserStatus(user.id, 'suspended')}
+                      disabled={processing} onClick={() => handleUpdateUserStatus(user.id, 'suspended')}
                       className="bg-red-50 hover:bg-red-100 text-red-600 p-2.5 rounded-xl transition-transform hover:scale-105 shadow-sm cursor-pointer" title="Rechazar y Suspender"
                     >
                       <X size={18} />
@@ -366,7 +271,7 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
                   {payment.receipt_url && (
                     <div className="flex-shrink-0">
                       <button 
-                        onClick={() => setActiveReceiptModalUrl(payment.receipt_url)}
+                        onClick={() => openReceipt(payment.receipt_url)}
                         className="flex items-center gap-2 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl hover:bg-indigo-100 transition-colors cursor-pointer"
                       >
                         <ImageIcon size={14} /> Ver Comprobante
@@ -376,13 +281,13 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
 
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => handleReviewPayment(payment.id, payment.user_id, 'approved')}
+                      disabled={processing} onClick={() => handleReviewPayment(payment.id, payment.user_id, 'approved')}
                       className="bg-green-600 hover:bg-green-700 text-white p-2.5 rounded-xl shadow-sm cursor-pointer" title="Aprobar Pago"
                     >
                       <Check size={18} />
                     </button>
                     <button 
-                      onClick={() => handleReviewPayment(payment.id, payment.user_id, 'rejected')}
+                      disabled={processing} onClick={() => handleReviewPayment(payment.id, payment.user_id, 'rejected')}
                       className="bg-red-50 hover:bg-red-100 text-red-600 p-2.5 rounded-xl shadow-sm cursor-pointer" title="Rechazar Pago"
                     >
                       <X size={18} />
@@ -426,10 +331,10 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
                   </div>
 
                   <div className="flex gap-2 justify-end">
-                    <button onClick={() => handleReviewContribution(cont.id, cont.user_id, cont.title, 'approved')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
+                    <button disabled={processing} onClick={() => handleReviewContribution(cont.id, cont.user_id, cont.title, 'approved')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
                       <Check size={14} /> Aprobar
                     </button>
-                    <button onClick={() => handleReviewContribution(cont.id, cont.user_id, cont.title, 'rejected')} className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
+                    <button disabled={processing} onClick={() => handleReviewContribution(cont.id, cont.user_id, cont.title, 'rejected')} className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1 shadow-sm cursor-pointer">
                       <X size={14} /> Rechazar
                     </button>
                   </div>
@@ -457,12 +362,13 @@ export function AdminApprovals({ showToast }: AdminApprovalsProps) {
             </button>
             <h4 className="font-extrabold text-sm text-gray-900 pr-8">Comprobante de Pago</h4>
             <div className="bg-gray-55 rounded-2xl border border-gray-150 p-2 overflow-hidden flex items-center justify-center max-h-[60vh]">
-              <img 
+              {receiptIsPdf ? <iframe title="Comprobante PDF" src={activeReceiptModalUrl} className="w-full h-[55vh]" /> : <img
                 src={activeReceiptModalUrl} 
                 alt="Comprobante" 
                 className="max-w-full max-h-[55vh] object-contain rounded-xl"
-              />
+              />}
             </div>
+            <a href={activeReceiptModalUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline text-sm">Abrir comprobante en otra ventana</a>
             <div className="flex justify-end mt-1">
               <button 
                 onClick={() => setActiveReceiptModalUrl(null)}

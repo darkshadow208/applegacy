@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { errorMessage } from '../lib/errors';
 import { supabase } from '../lib/supabase';
 
 export interface StudyGoal {
@@ -30,6 +31,9 @@ export interface StudyProfile {
 }
 
 export function useStudyPlan(userId: string | undefined) {
+  const [reload, setReload] = useState(0);
+  const refresh = useCallback(() => setReload(value => value + 1), []);
+  const [error, setError] = useState<string | null>(null);
   const [goals, setGoals] = useState<StudyGoal[]>([]);
   const [tasks, setTasks] = useState<StudyTask[]>([]);
   const [habits, setHabits] = useState<StudyHabit[]>([]);
@@ -47,6 +51,7 @@ export function useStudyPlan(userId: string | undefined) {
 
     async function loadData() {
       setLoading(true);
+      setError(null);
       try {
         const [goalsRes, tasksRes, habitsRes, profileRes, configsRes] = await Promise.all([
           supabase.from('study_goals').select('*').eq('user_id', userId),
@@ -56,6 +61,9 @@ export function useStudyPlan(userId: string | undefined) {
           supabase.from('course_student_configs').select('*').eq('user_id', userId)
         ]);
 
+        for (const result of [goalsRes, tasksRes, habitsRes, profileRes, configsRes]) {
+          if (result.error) throw result.error;
+        }
         if (goalsRes.data) setGoals(goalsRes.data);
         if (tasksRes.data) setTasks(tasksRes.data);
         if (habitsRes.data) {
@@ -88,12 +96,12 @@ export function useStudyPlan(userId: string | undefined) {
 
           // If changed, update db silently
           if (habitsChanged) {
-            processedHabits.forEach((h: any) => {
-              supabase.from('study_habits').update({ 
+            await Promise.all(processedHabits.map((h: any) => {
+              return supabase.from('study_habits').update({
                 completed_today: h.completed_today, 
                 streak: h.streak 
-              }).eq('id', h.id).then();
-            });
+              }).eq('id', h.id).throwOnError();
+            }));
           }
         }
         
@@ -101,7 +109,7 @@ export function useStudyPlan(userId: string | undefined) {
           setProfile(profileRes.data);
         } else {
           // Create default profile
-          await supabase.from('student_study_profile').insert({ user_id: userId });
+          await supabase.from('student_study_profile').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true }).throwOnError();
         }
 
         if (configsRes.data) {
@@ -111,6 +119,7 @@ export function useStudyPlan(userId: string | undefined) {
         }
 
       } catch (err) {
+        setError(errorMessage(err));
         console.error('Error loading study plan:', err);
       } finally {
         setLoading(false);
@@ -118,7 +127,7 @@ export function useStudyPlan(userId: string | undefined) {
     }
 
     loadData();
-  }, [userId]);
+  }, [userId, reload]);
 
   return {
     goals, setGoals,
@@ -126,6 +135,6 @@ export function useStudyPlan(userId: string | undefined) {
     habits, setHabits,
     profile, setProfile,
     courseConfigs, setCourseConfigs,
-    loading
+    loading, error, refresh
   };
 }

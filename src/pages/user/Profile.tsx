@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { errorMessage } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { User, LogOut, Lock, Bell, ChevronRight, Loader2, Camera, CreditCard, HelpCircle, Heart, Target, Settings, Star } from 'lucide-react';
 
@@ -87,15 +88,20 @@ export function Profile() {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (password.trim().length > 0 && password.trim().length < 6) {
+      alert('La nueva contraseña debe tener al menos 6 caracteres.'); return;
+    }
     setLoading(true);
     setSuccessMsg('');
 
     try {
       if (fullName !== profile?.full_name) {
-        await supabase.from('users_profiles').update({ full_name: fullName }).eq('id', user.id);
+        await supabase.from('users_profiles').update({ full_name: fullName }).eq('id', user.id).select('id').single().throwOnError();
+        useAuthStore.setState({ profile: { ...profile!, full_name: fullName } });
       }
       if (password.trim().length >= 6) {
-        await supabase.auth.updateUser({ password });
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
         setPassword('');
       } else if (password.trim().length > 0) {
         alert('La nueva contraseña debe tener al menos 6 caracteres.');
@@ -106,6 +112,7 @@ export function Profile() {
       setSuccessMsg('Perfil actualizado correctamente.');
       useAuthStore.setState({ profile: { ...profile!, full_name: fullName }});
     } catch (error) {
+      alert(errorMessage(error));
       console.error(error);
     } finally {
       setLoading(false);
@@ -132,7 +139,7 @@ export function Profile() {
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
 
-      await supabase.from('users_profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      await supabase.from('users_profiles').update({ avatar_url: publicUrl }).eq('id', user.id).select('id').single().throwOnError();
       
       useAuthStore.setState({ profile: { ...profile!, avatar_url: publicUrl }});
       setSuccessMsg('Foto de perfil actualizada.');
@@ -373,7 +380,7 @@ export function Profile() {
 
       {/* Logout */}
       <button 
-        onClick={signOut}
+        onClick={() => void signOut().catch(error => alert(errorMessage(error)))}
         className="mt-4 flex items-center justify-center gap-2 py-4 px-4 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-colors"
       >
         <LogOut size={20} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
+import { errorMessage } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { Bell, CheckCircle, Trash2, CheckCheck } from 'lucide-react';
 
@@ -58,119 +59,30 @@ export function Notifications() {
     fetchNotifications();
   }, [user]);
 
+  const [saving, setSaving] = useState(false);
+  const saveState = async (action: 'read' | 'clear', ids: string[]) => {
+    if (saving) return false;
+    setSaving(true);
+    try {
+      await supabase.rpc('update_notification_state', { p_action: action, p_ids: ids }).throwOnError();
+      return true;
+    } catch (error) { alert(errorMessage(error)); return false; }
+    finally { setSaving(false); }
+  };
   const markAsRead = async (id: string) => {
-    const notif = notifications.find(n => n.id === id);
-    if (notif && notif.user_id === null && user) {
-      // 1. Guardar localmente
-      const cacheKeyRead = `read_global_notifs_${user.id}`;
-      const readGlobalLocal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
-      if (!readGlobalLocal.includes(id)) {
-        localStorage.setItem(cacheKeyRead, JSON.stringify([...readGlobalLocal, id]));
-      }
-
-      // 2. Sincronizar en DB
-      try {
-        const { data: profile } = await supabase
-          .from('users_profiles')
-          .select('read_global_notifs')
-          .eq('id', user.id)
-          .maybeSingle();
-        
-        const currentRead = profile?.read_global_notifs || [];
-        if (!currentRead.includes(id)) {
-          await supabase.from('users_profiles').update({
-            read_global_notifs: [...currentRead, id]
-          }).eq('id', user.id);
-        }
-      } catch (err) {
-        console.warn('Error al sincronizar lectura en DB:', err);
-      }
-    }
-
+    if (!await saveState('read', [id])) return;
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     decrementUnread();
-    
-    if (notif && notif.user_id !== null) {
-      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-      if (error) {
-        console.warn('Error al actualizar lectura en base de datos:', error);
-      }
-    }
   };
-
   const markAllAsRead = async () => {
-    const unreadGlobals = notifications.filter(n => n.user_id === null && !n.is_read).map(n => n.id);
-    if (unreadGlobals.length > 0 && user) {
-      // Local
-      const cacheKeyRead = `read_global_notifs_${user.id}`;
-      const readGlobalLocal = JSON.parse(localStorage.getItem(cacheKeyRead) || '[]');
-      const newReadsLocal = Array.from(new Set([...readGlobalLocal, ...unreadGlobals]));
-      localStorage.setItem(cacheKeyRead, JSON.stringify(newReadsLocal));
-
-      // DB
-      try {
-        const { data: profile } = await supabase
-          .from('users_profiles')
-          .select('read_global_notifs')
-          .eq('id', user.id)
-          .maybeSingle();
-        
-        const currentRead = profile?.read_global_notifs || [];
-        const newReads = Array.from(new Set([...currentRead, ...unreadGlobals]));
-        await supabase.from('users_profiles').update({ read_global_notifs: newReads }).eq('id', user.id);
-      } catch (err) {
-        console.warn('Error al marcar todas como leídas en DB:', err);
-      }
-    }
-
+    if (!await saveState('read', notifications.map(n => n.id))) return;
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    resetUnread();
-    if (user) {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false);
-      if (error) {
-        console.error('Error marking all as read:', error);
-      }
-    }
+    if (user) await useNotificationStore.getState().fetchUnreadCount(user.id);
   };
-
   const clearAll = async () => {
-    // Identificar notificaciones globales para borrarlas localmente
-    const globalIds = notifications.filter(n => n.user_id === null).map(n => n.id);
-    if (globalIds.length > 0 && user) {
-      // Local
-      const cacheKey = `deleted_global_notifs_${user.id}`;
-      const deletedGlobalLocal = JSON.parse(localStorage.getItem(cacheKey) || '[]');
-      localStorage.setItem(cacheKey, JSON.stringify([...deletedGlobalLocal, ...globalIds]));
-
-      // DB
-      try {
-        const { data: profile } = await supabase
-          .from('users_profiles')
-          .select('deleted_global_notifs')
-          .eq('id', user.id)
-          .maybeSingle();
-        
-        const currentDeleted = profile?.deleted_global_notifs || [];
-        const newDeleted = Array.from(new Set([...currentDeleted, ...globalIds]));
-        await supabase.from('users_profiles').update({ deleted_global_notifs: newDeleted }).eq('id', user.id);
-      } catch (err) {
-        console.warn('Error al borrar notificaciones globales en DB:', err);
-      }
-    }
-
+    if (!await saveState('clear', notifications.map(n => n.id))) return;
     setNotifications([]);
     resetUnread();
-    const personalIdsToDelete = notifications.filter(n => n.user_id !== null).map(n => n.id);
-    if (personalIdsToDelete.length > 0) {
-      const { error } = await supabase.from('notifications').delete().in('id', personalIdsToDelete);
-      if (error) {
-        console.error('Error clearing notifications:', error);
-      }
-    }
   };
 
   return (
@@ -185,13 +97,13 @@ export function Notifications() {
         {notifications.length > 0 && (
           <div className="flex gap-2">
             <button 
-              onClick={markAllAsRead}
+              disabled={saving} onClick={markAllAsRead}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-semibold hover:bg-blue-100 transition-colors"
             >
               <CheckCheck size={14} /> Leídas
             </button>
             <button 
-              onClick={clearAll}
+              disabled={saving} onClick={clearAll}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-full text-xs font-semibold hover:bg-red-100 transition-colors"
             >
               <Trash2 size={14} /> Limpiar

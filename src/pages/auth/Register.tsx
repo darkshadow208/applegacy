@@ -39,8 +39,7 @@ export function Register() {
 
     try {
       // 1. Upload receipt
-      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const filePath = `registration/${crypto.randomUUID()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('payment_receipts')
@@ -51,10 +50,7 @@ export function Register() {
 
       if (uploadError) throw uploadError;
 
-      // 2. Get public URL (or just store the path, but public URL is easier)
-      const { data: { publicUrl } } = supabase.storage
-        .from('payment_receipts')
-        .getPublicUrl(filePath);
+      // La ruta es privada. El administrador abrirá un enlace temporal.
 
       // 3. Sign up the user
       const { error: signUpError } = await supabase.auth.signUp({
@@ -66,7 +62,7 @@ export function Register() {
             phone: phone,
             telegram: telegram,
             start_date: startDate,
-            payment_receipt_url: publicUrl
+            payment_receipt_url: filePath
           }
         }
       });

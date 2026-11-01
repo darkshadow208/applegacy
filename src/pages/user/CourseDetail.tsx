@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Play, Share2, Heart, Loader2, Clock, Target, Award, Check } from 'lucide-react';
+import { saveCourseProgress } from '../../lib/studyProgress';
+import { errorMessage } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
 
@@ -64,47 +66,36 @@ export function CourseDetail() {
   const [loadingFav, setLoadingFav] = useState(false);
   const [studyStatus, setStudyStatus] = useState<'pending' | 'progress' | 'completed'>('pending');
 
-  // Cargar estado del plan de estudio local
+  const [authorized, setAuthorized] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [savingProgress, setSavingProgress] = useState(false);
   useEffect(() => {
-    if (!user || !id) return;
-    try {
-      const storageKey = `study_plan_${user.id}`;
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.courseConfigs && parsed.courseConfigs[id]) {
-          setStudyStatus(parsed.courseConfigs[id].status || 'pending');
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    let active = true;
+    if (!user || !id || !isValidUUID(id)) return;
+    void Promise.resolve(supabase.from('course_student_configs').select('status')
+      .eq('user_id', user.id).eq('course_id', id).maybeSingle().throwOnError())
+      .then(({ data }) => { if (active) setStudyStatus(data?.status ?? 'pending'); })
+      .catch(error => { if (active) alert(errorMessage(error)); });
+    return () => { active = false; };
   }, [user, id]);
 
-  const handleUpdateStudyStatus = (newStatus: 'pending' | 'progress' | 'completed') => {
-    if (!user || !id) return;
+  const handleUpdateStudyStatus = async (newStatus: 'pending' | 'progress' | 'completed') => {
+    if (!user || !id || savingProgress) return;
+    if (!isValidUUID(id)) { alert('Este curso de ejemplo no tiene progreso guardable.'); return; }
+    setSavingProgress(true);
     try {
-      const storageKey = `study_plan_${user.id}`;
-      const saved = localStorage.getItem(storageKey) || '{}';
-      const parsed = JSON.parse(saved);
-      
-      if (!parsed.courseConfigs) parsed.courseConfigs = {};
-      parsed.courseConfigs[id] = {
-        ...(parsed.courseConfigs[id] || { priority: 'medium' }),
-        status: newStatus
-      };
-      
-      localStorage.setItem(storageKey, JSON.stringify(parsed));
+      await saveCourseProgress(user.id, id, newStatus);
       setStudyStatus(newStatus);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (error) { alert(errorMessage(error)); }
+    finally { setSavingProgress(false); }
   };
 
   useEffect(() => {
     async function loadCourseAndFavorite() {
       if (!id) return;
       
+      setAuthorized(false);
+      setLoadError(null);
       // Si no tenemos el curso optimista, mostramos cargador temporal
       if (!course) {
         setLoading(true);
@@ -148,6 +139,7 @@ export function CourseDetail() {
           .single();
 
         if (!courseError && dbCourse) {
+          setAuthorized(true);
           const categoryName = Array.isArray(dbCourse.course_categories)
             ? (dbCourse.course_categories[0] as any)?.name
             : (dbCourse.course_categories as any)?.name;
@@ -161,9 +153,9 @@ export function CourseDetail() {
             drive_url: dbCourse.drive_url || '#',
             level: 'Intermedio'
           });
-        } else if (!course) {
-          const mock = mockCourses.find(c => c.id === id) || mockCourses[0];
-          setCourse(mock);
+        } else {
+          setCourse(null);
+          setLoadError('Este curso no está disponible para tu membresía actual.');
         }
 
         // LIBERAMOS LA PANTALLA DE CARGA DEL CURSO DE INMEDIATO
@@ -196,10 +188,8 @@ export function CourseDetail() {
         }
       } catch (err) {
         console.error(err);
-        if (!course) {
-          const mock = mockCourses.find(c => c.id === id) || mockCourses[0];
-          setCourse(mock);
-        }
+        setCourse(null);
+        setLoadError(errorMessage(err));
         setLoading(false);
       }
     }
@@ -207,68 +197,20 @@ export function CourseDetail() {
   }, [id, user]);
 
   const toggleFavorite = async () => {
-    if (!user || !course) return;
+    if (!user || !course || loadingFav) return;
+    if (!isValidUUID(course.id)) { alert('Este curso de ejemplo no se puede guardar en favoritos.'); return; }
     setLoadingFav(true);
-    const isMock = !isValidUUID(course.id);
-
     try {
-      if (isMock) {
-        const localKey = `local_favorites_${user.id}`;
-        const localSaved = localStorage.getItem(localKey) || '[]';
-        let localFavs = JSON.parse(localSaved);
-        if (isFavorite) {
-          localFavs = localFavs.filter((cid: string) => cid !== course.id);
-          setIsFavorite(false);
-        } else {
-          localFavs.push(course.id);
-          setIsFavorite(true);
-        }
-        localStorage.setItem(localKey, JSON.stringify(localFavs));
-      } else {
-        if (isFavorite) {
-          const { error } = await supabase.from('favorite_courses').delete().eq('user_id', user.id).eq('course_id', course.id);
-          if (error) {
-            const localKey = `local_favorites_${user.id}`;
-            const localSaved = localStorage.getItem(localKey) || '[]';
-            let localFavs = JSON.parse(localSaved);
-            localFavs = localFavs.filter((cid: string) => cid !== course.id);
-            localStorage.setItem(localKey, JSON.stringify(localFavs));
-            setIsFavorite(false);
-          } else {
-            setIsFavorite(false);
-          }
-        } else {
-          const { error } = await supabase.from('favorite_courses').insert({ user_id: user.id, course_id: course.id });
-          if (error) {
-            const localKey = `local_favorites_${user.id}`;
-            const localSaved = localStorage.getItem(localKey) || '[]';
-            let localFavs = JSON.parse(localSaved);
-            if (!localFavs.includes(course.id)) {
-              localFavs.push(course.id);
-              localStorage.setItem(localKey, JSON.stringify(localFavs));
-            }
-            setIsFavorite(true);
-          } else {
-            setIsFavorite(true);
-          }
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      const localKey = `local_favorites_${user.id}`;
-      const localSaved = localStorage.getItem(localKey) || '[]';
-      let localFavs = JSON.parse(localSaved);
       if (isFavorite) {
-        localFavs = localFavs.filter((cid: string) => cid !== course.id);
-        setIsFavorite(false);
+        await supabase.from('favorite_courses').delete().eq('user_id', user.id)
+          .eq('course_id', course.id).throwOnError();
       } else {
-        if (!localFavs.includes(course.id)) localFavs.push(course.id);
-        setIsFavorite(true);
+        await supabase.from('favorite_courses').upsert({ user_id: user.id, course_id: course.id },
+          { onConflict: 'user_id,course_id', ignoreDuplicates: true }).throwOnError();
       }
-      localStorage.setItem(localKey, JSON.stringify(localFavs));
-    } finally {
-      setLoadingFav(false);
-    }
+      setIsFavorite(!isFavorite);
+    } catch (error) { alert(errorMessage(error)); }
+    finally { setLoadingFav(false); }
   };
 
   const handleShare = async () => {
@@ -292,6 +234,8 @@ export function CourseDetail() {
       }
     }
   };
+
+  if (loadError) return <div role="alert" className="p-6 text-red-700">{loadError}</div>;
 
   if (loading || !course) {
     return (
@@ -351,7 +295,7 @@ export function CourseDetail() {
         {/* Acciones principales */}
         <div className="flex gap-3">
           <a 
-            href={course.drive_url} 
+            href={authorized ? course.drive_url : undefined} aria-disabled={!authorized}
             target="_blank" 
             rel="noreferrer"
             className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2 font-bold shadow-lg shadow-blue-500/30 hover:scale-[1.02] transition-transform"
@@ -381,7 +325,7 @@ export function CourseDetail() {
               </div>
             </div>
             <button 
-              onClick={() => handleUpdateStudyStatus('progress')}
+              disabled={savingProgress} onClick={() => handleUpdateStudyStatus('progress')}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               🚀 Empezar a estudiar
@@ -405,13 +349,13 @@ export function CourseDetail() {
             </div>
             <div className="flex gap-2">
               <button 
-                onClick={() => handleUpdateStudyStatus('completed')}
+                disabled={savingProgress} onClick={() => handleUpdateStudyStatus('completed')}
                 className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow transition-colors flex items-center justify-center gap-1 cursor-pointer"
               >
                 <Check size={14} /> Completado
               </button>
               <button 
-                onClick={() => handleUpdateStudyStatus('pending')}
+                disabled={savingProgress} onClick={() => handleUpdateStudyStatus('pending')}
                 className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Pausar
@@ -435,7 +379,7 @@ export function CourseDetail() {
               <span className="text-[9px] font-extrabold uppercase bg-green-500 text-white px-2 py-0.5 rounded-full tracking-wider">Completado</span>
             </div>
             <button 
-              onClick={() => handleUpdateStudyStatus('progress')}
+              disabled={savingProgress} onClick={() => handleUpdateStudyStatus('progress')}
               className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow transition-colors cursor-pointer"
             >
               🔄 Reiniciar / Estudiar de nuevo

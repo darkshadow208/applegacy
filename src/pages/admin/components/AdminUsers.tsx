@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { signedReceiptUrl } from '../../../lib/receipts';
+import { errorMessage } from '../../../lib/errors';
 import { supabase } from '../../../lib/supabase';
 import { 
   Search, 
@@ -106,99 +108,43 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
   }, [searchQuery]);
 
   // --- ACTIONS ---
-  const handleUpdateUserStatus = async (userId: string, newStatus: 'approved' | 'suspended') => {
+  const [updatingUser, setUpdatingUser] = useState(false);
+  const openReceipt = async (path: string) => {
+    const preview = window.open('about:blank', '_blank');
+    if (preview) preview.opener = null;
     try {
-      const { error } = await supabase.from('users_profiles').update({ status: newStatus }).eq('id', userId);
-      if (error) throw error;
-      
-      if (newStatus === 'approved') {
-        const startDate = new Date().toISOString();
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 30);
+      const url = await signedReceiptUrl(path);
+      if (preview) preview.location.href = url;
+      else showToast('Permite las ventanas emergentes para ver el comprobante.', 'error');
+    } catch (error) { preview?.close(); showToast(errorMessage(error), 'error'); }
+  };
 
-        const { data: existingSub } = await supabase
-          .from('subscriptions')
-          .select('id')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        let subError;
-        if (existingSub) {
-          const { error } = await supabase
-            .from('subscriptions')
-            .update({
-              status: 'active',
-              plan_name: 'Mensual VIP',
-              start_date: startDate,
-              end_date: endDate.toISOString()
-            })
-            .eq('id', existingSub.id);
-          subError = error;
-        } else {
-          const { error } = await supabase
-            .from('subscriptions')
-            .insert({
-              user_id: userId,
-              status: 'active',
-              plan_name: 'Mensual VIP',
-              start_date: startDate,
-              end_date: endDate.toISOString()
-            });
-          subError = error;
-        }
-
-        if (subError) throw subError;
-
-        // Mandar notificación push al aprobar la cuenta
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          title: '🎉 ¡Cuenta Aprobada!',
-          message: 'Bienvenido a Legacy Academy. Ya tienes acceso a todos los cursos VIP.',
-          is_read: false
-        });
-      }
-
-      showToast(`Usuario actualizado a ${newStatus}`, 'success');
-      fetchUsers();
-    } catch (err) {
-      console.error(err);
-      showToast('Error al actualizar usuario', 'error');
-    }
+  const handleUpdateUserStatus = async (userId: string, newStatus: 'approved' | 'suspended') => {
+    if (updatingUser) return;
+    setUpdatingUser(true);
+    try {
+      await supabase.rpc('admin_set_user_status', { p_user_id: userId, p_status: newStatus }).throwOnError();
+      showToast(newStatus === 'approved' ? 'Cuenta aprobada.' : 'Cuenta suspendida.', 'success');
+      await fetchUsers();
+    } catch (error) { showToast(errorMessage(error), 'error'); }
+    finally { setUpdatingUser(false); }
   };
 
   const handleUpdateSubscriptionDates = async (userId: string) => {
     if (!editingSubStartDate || !editingSubEndDate) {
-      showToast('Por favor selecciona ambas fechas', 'error');
-      return;
+      showToast('Por favor selecciona ambas fechas', 'error'); return;
     }
     setSavingSubDates(true);
     try {
-      const { error } = await supabase.from('subscriptions').upsert({
-        user_id: userId,
-        status: new Date(editingSubEndDate) > new Date() ? 'active' : 'expired',
-        start_date: new Date(editingSubStartDate).toISOString(),
-        end_date: new Date(editingSubEndDate).toISOString(),
-        plan_name: 'Mensual VIP'
-      });
-      
-      if (error) throw error;
-
-      await supabase.from('notifications').insert({
-        user_id: userId,
-        title: '👑 Suscripción Actualizada',
-        message: `El administrador ha modificado las fechas de tu membresía VIP. Tienes acceso hasta el ${new Date(editingSubEndDate).toLocaleDateString()}.`,
-        is_read: false
-      });
-
+      await supabase.rpc('admin_set_subscription_dates', {
+        p_user_id: userId, p_start: new Date(editingSubStartDate).toISOString(),
+        p_end: new Date(editingSubEndDate).toISOString()
+      }).throwOnError();
       showToast('Fechas de suscripción actualizadas', 'success');
       setEditingSubUserId(null);
-      fetchUsers();
-    } catch (err) {
-      console.error(err);
-      showToast('Error al actualizar fechas', 'error');
-    } finally {
-      setSavingSubDates(false);
-    }
+      await fetchUsers();
+    } catch (error) { showToast(errorMessage(error), 'error'); }
+    finally { setSavingSubDates(false); }
   };
 
   const handleLoadUserPayments = async (userId: string) => {
@@ -435,7 +381,7 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
                                     <span className="text-xs font-black text-gray-950">${p.amount} USD</span>
                                     {p.receipt_url && (
                                       <a 
-                                        href={p.receipt_url} 
+                                        href="#" onClick={(event) => { event.preventDefault(); void openReceipt(p.receipt_url); }}
                                         target="_blank" 
                                         rel="noreferrer" 
                                         className="text-indigo-600 hover:text-indigo-800 p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors cursor-pointer"
@@ -456,21 +402,21 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
                     <div className="flex gap-2">
                        {student.status === 'pending' ? (
                          <button 
-                           onClick={() => handleUpdateUserStatus(student.id, 'approved')} 
+                           disabled={updatingUser} onClick={() => handleUpdateUserStatus(student.id, 'approved')}
                            className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:scale-[1.02]"
                          >
                            Aprobar Registro
                          </button>
                        ) : student.status === 'suspended' ? (
                          <button 
-                           onClick={() => handleUpdateUserStatus(student.id, 'approved')} 
+                           disabled={updatingUser} onClick={() => handleUpdateUserStatus(student.id, 'approved')}
                            className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:scale-[1.02]"
                          >
                            Reactivar Cuenta
                          </button>
                        ) : (
                          <button 
-                           onClick={() => handleUpdateUserStatus(student.id, 'approved')} 
+                           disabled={updatingUser} onClick={() => handleUpdateUserStatus(student.id, 'approved')}
                            className="bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-black transition-colors cursor-pointer shadow-sm"
                          >
                            Renovar 30D
@@ -479,7 +425,7 @@ export function AdminUsers({ showToast }: AdminUsersProps) {
 
                        {student.status !== 'suspended' && (
                          <button 
-                           onClick={() => handleUpdateUserStatus(student.id, 'suspended')} 
+                           disabled={updatingUser} onClick={() => handleUpdateUserStatus(student.id, 'suspended')}
                            className="bg-red-50 text-red-600 text-xs font-bold px-3 py-2.5 rounded-xl hover:bg-red-100 transition-colors cursor-pointer shadow-sm"
                          >
                            Suspender

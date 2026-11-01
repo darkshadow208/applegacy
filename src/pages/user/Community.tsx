@@ -24,7 +24,7 @@ export function Community() {
       try {
         let query = supabase
           .from('user_contributions')
-          .select('*, users_profiles (full_name, avatar_url)', { count: 'exact' })
+          .select('*', { count: 'exact' })
           .eq('status', 'approved');
 
         if (selectedCategory !== 'Todas') {
@@ -40,7 +40,12 @@ export function Community() {
         if (error) throw error;
         
         if (data) {
-          setContributions(data);
+          const ids: string[] = [...new Set<string>(data.map((item: { user_id: string }) => item.user_id))];
+          const { data: profiles } = await supabase.from('users_public_profiles')
+            .select('id, full_name, avatar_url').in('id', ids).throwOnError();
+          setContributions(data.map((item: { user_id: string }) => ({ ...item,
+            users_profiles: profiles?.find(profile => profile.id === item.user_id) })));
+
           if (count !== null && count !== undefined) {
             setTotalPages(Math.ceil(count / ITEMS_PER_PAGE) || 1);
           }

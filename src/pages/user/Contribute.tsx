@@ -120,33 +120,7 @@ export function Contribute() {
 
       if (result && result.error) throw result.error;
       
-      // Manejar notificaciones dependiendo de si es admin o usuario
-      try {
-        if (profile?.role === 'admin') {
-          // Si es admin, el aporte ya está aprobado y público. Notificar a todos.
-          await supabase.from('notifications').insert({
-            user_id: null,
-            title: '🌟 Nuevo Aporte en la Comunidad',
-            message: `Se ha publicado un nuevo aporte: "${title}". ¡Ve a revisarlo!`,
-            is_read: false
-          });
-        } else {
-          // Si es usuario, notificar a todos los administradores
-          const { data: admins } = await supabase.from('users_profiles').select('id').eq('role', 'admin');
-          if (admins && admins.length > 0) {
-            const notifs = admins.map(a => ({
-              user_id: a.id,
-              title: '📝 Nuevo Aporte Pendiente',
-              message: `${profile?.full_name || 'Un usuario'} ha enviado un nuevo recurso: "${title}". Revísalo en el panel de administrador.`,
-              is_read: false
-            }));
-            await supabase.from('notifications').insert(notifs);
-          }
-        }
-      } catch (notifErr) {
-        console.warn('No se pudo enviar notificaciones', notifErr);
-      }
-
+      // El trigger notifica sin exponer perfiles privados de administradores.
       setSuccess(true);
     } catch (err: any) {
       console.error('Error al guardar aporte en DB:', err);

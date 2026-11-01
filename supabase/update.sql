@@ -18,7 +18,7 @@ CREATE POLICY "Users can delete own favorites" ON public.favorite_courses FOR DE
 -- 2. Crear buckets específicos (si no existen)
 -- Nota: Si usas la interfaz web de Supabase, puedes crear los buckets 'avatars' (público) y 'payment_receipts' (privado)
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
-INSERT INTO storage.buckets (id, name, public) VALUES ('payment_receipts', 'payment_receipts', true) ON CONFLICT (id) DO UPDATE SET public = true;
+INSERT INTO storage.buckets (id, name, public) VALUES ('payment_receipts', 'payment_receipts', false) ON CONFLICT (id) DO UPDATE SET public = false;
 
 -- Dar permisos para avatares
 CREATE POLICY "Avatar images are publicly accessible." ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
@@ -31,11 +31,12 @@ CREATE POLICY "Users can upload their own receipts." ON storage.objects FOR INSE
 
 DROP POLICY IF EXISTS "Users can view their own receipts." ON storage.objects;
 DROP POLICY IF EXISTS "Payment receipts are publicly accessible." ON storage.objects;
-CREATE POLICY "Payment receipts are publicly accessible." ON storage.objects FOR SELECT USING (bucket_id = 'payment_receipts');
+-- Los comprobantes son privados. Aplicar migrations/202611010001_manual_approvals_security.sql para sus permisos.
 
 -- 3. Habilitar políticas de RLS adicionales para suscripciones y perfiles
 -- Permitir que usuarios autenticados vean cualquier perfil (necesario para ver nombres en los aportes de Comunidad)
-CREATE POLICY "Authenticated users can view any profile" ON public.users_profiles FOR SELECT USING (auth.role() = 'authenticated');
+-- La comunidad consulta users_public_profiles; nunca habilitar lectura de perfiles privados.
+DROP POLICY IF EXISTS "Authenticated users can view any profile" ON public.users_profiles;
 
 -- Permitir que los usuarios vean su propia suscripción
 CREATE POLICY "Users can view own subscription" ON public.subscriptions FOR SELECT USING (auth.uid() = user_id);

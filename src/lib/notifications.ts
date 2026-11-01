@@ -2,6 +2,26 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from './supabase';
+import type { PluginListenerHandle } from '@capacitor/core';
+import { PushLifecycle, nextNotificationId } from './pushLifecycle';
+
+const bindingKey = 'legacy_push_device';
+const pushLifecycle = new PushLifecycle(async (token, platform) => {
+  await supabase.rpc('register_push_device', { p_token: token, p_platform: platform }).throwOnError();
+  const { data } = await supabase.auth.getSession();
+  if (data.session) localStorage.setItem(bindingKey, JSON.stringify({ userId: data.session.user.id, token }));
+}, async token => {
+  await supabase.rpc('unregister_push_device', { p_token: token }).throwOnError();
+});
+let pushListeners: PluginListenerHandle[] = [];
+let registrationTask: Promise<void> = Promise.resolve();
+let reminderInterval: ReturnType<typeof setInterval> | undefined;
+let expirationUser: string | null = null;
+async function removePushListeners() {
+  const previous = pushListeners; pushListeners = [];
+  await Promise.all(previous.map(listener => listener.remove()));
+}
+
 
 export const notificationService = {
   async requestPermissions() {
@@ -19,82 +39,33 @@ export const notificationService = {
     }
   },
 
-  async registerPushNotifications(userId: string) {
-    // --- NATIVE PLATFORM (ANDROID / IOS) ---
-    if (Capacitor.isNativePlatform()) {
-      try {
-        let permStatus = await PushNotifications.checkPermissions();
-        if (permStatus.receive === 'prompt') {
-          permStatus = await PushNotifications.requestPermissions();
-        }
-
-        if (permStatus.receive !== 'granted') {
-          throw new Error('Push permissions not granted');
-        }
-
-        // Registers with Apple/Google
-        await PushNotifications.register();
-
-        // Listen for registration success
-        PushNotifications.addListener('registration', async (token) => {
-          console.log('Push registration success, token:', token.value);
-          // Save the FCM token to Supabase profile and user_push_devices
-          await supabase
-            .from('users_profiles')
-            .update({ fcm_token: token.value })
-            .eq('id', userId);
-
-          try {
-            await supabase.from('user_push_devices').upsert({
-              user_id: userId,
-              fcm_token: token.value,
-              platform: 'native'
-            }, { onConflict: 'user_id,fcm_token' });
-          } catch {
-            // Silently ignore if table not created yet
+  registerPushNotifications(userId: string) {
+    const generation = pushLifecycle.start(userId);
+    registrationTask = registrationTask.catch(() => {}).then(async () => {
+      await removePushListeners();
+      if (!pushLifecycle.isCurrent(generation)) return;
+      if (Capacitor.isNativePlatform()) {
+        const onToken = await PushNotifications.addListener('registration', token => {
+          void pushLifecycle.bind(generation, token.value, 'native')
+            .catch(error => console.error('No se pudo registrar el dispositivo:', error));
+        });
+        const onError = await PushNotifications.addListener('registrationError', error => {
+          console.warn('No se pudo registrar push:', error);
+        });
+        const onAction = await PushNotifications.addListener('pushNotificationActionPerformed', notification => {
+          if (!pushLifecycle.isCurrent(generation)) return;
+          const url = notification.notification.data?.url;
+          if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')) {
+            window.dispatchEvent(new CustomEvent('push-navigate', { detail: url }));
           }
         });
-
-        // Listen for registration error
-        PushNotifications.addListener('registrationError', (error: any) => {
-          console.error('Push registration error:', error);
-        });
-
-        // Listen for push notifications received
-        PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          console.log('Push received: ', notification);
-        });
-
-        // Listen for push notification click
-        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-          console.log('Push action performed: ', notification);
-          const data = notification.notification.data;
-          if (data && data.url) {
-            // Despachar evento global para que UserLayout navegue
-            window.dispatchEvent(new CustomEvent('push-navigate', { detail: data.url }));
-          }
-        });
-
-      } catch (err) {
-        console.warn('PushNotifications not supported in this native environment:', err);
-      }
-    } 
-    // --- WEB / PWA PLATFORM (DESKTOP & SAFARI IOS 16.4+) ---
-    else {
-      try {
-        if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-          console.warn('Push notifications not supported on this browser.');
-          return;
-        }
-
-        // Solicitar permisos al navegador
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          console.log('Permisos de notificación web denegados.');
-          return;
-        }
-
-        // Obtener variables de Firebase
+        pushListeners = [onToken, onError, onAction];
+        if (!pushLifecycle.isCurrent(generation)) { await removePushListeners(); return; }
+        let permission = await PushNotifications.checkPermissions();
+        if (permission.receive === 'prompt') permission = await PushNotifications.requestPermissions();
+        if (permission.receive === 'granted' && pushLifecycle.isCurrent(generation)) await PushNotifications.register();
+      } else {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
         const firebaseConfig = {
           apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
           authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -103,64 +74,54 @@ export const notificationService = {
           messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
           appId: import.meta.env.VITE_FIREBASE_APP_ID
         };
-
         const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-
-        if (!firebaseConfig.apiKey || !firebaseConfig.messagingSenderId || !vapidKey) {
-          console.warn('Configuración de Firebase Web o VAPID Key faltante en variables de entorno. Omitiendo Web Push.');
-          return;
-        }
-
-        // Registrar Service Worker con credenciales dinámicas en la URL
-        const swParams = new URLSearchParams(firebaseConfig).toString();
-        const swUrl = `/firebase-messaging-sw.js?${swParams}`;
-        const registration = await navigator.serviceWorker.register(swUrl, { scope: '/' });
-
-        // Cargar SDK dinámicamente para no pesar en el bundle inicial
-        const { initializeApp } = await import('firebase/app');
+        if (!firebaseConfig.apiKey || !firebaseConfig.messagingSenderId || !vapidKey) return;
+        if (await Notification.requestPermission() !== 'granted' || !pushLifecycle.isCurrent(generation)) return;
+        const registration = await navigator.serviceWorker.register(
+          '/firebase-messaging-sw.js?' + new URLSearchParams(firebaseConfig), { scope: '/' });
+        const { initializeApp, getApps } = await import('firebase/app');
         const { getMessaging, getToken } = await import('firebase/messaging');
-
-        const app = initializeApp(firebaseConfig);
-        const messaging = getMessaging(app);
-
-        // Obtener token de FCM para Web
-        const token = await getToken(messaging, {
-          serviceWorkerRegistration: registration,
-          vapidKey: vapidKey
-        });
-
-        if (token) {
-          console.log('Web Push FCM token obtenido con éxito:', token);
-          // Guardar el token en Supabase profile y user_push_devices
-          await supabase
-            .from('users_profiles')
-            .update({ fcm_token: token })
-            .eq('id', userId);
-
-          try {
-            await supabase.from('user_push_devices').upsert({
-              user_id: userId,
-              fcm_token: token,
-              platform: 'web'
-            }, { onConflict: 'user_id,fcm_token' });
-          } catch {
-            // Silently ignore if table not created yet
-          }
-        } else {
-          console.warn('No se pudo obtener el token Web Push de FCM.');
-        }
-
-      } catch (err) {
-        console.warn('Error al registrar Web Push:', err);
+        const app = getApps()[0] ?? initializeApp(firebaseConfig);
+        const token = await getToken(getMessaging(app), { serviceWorkerRegistration: registration, vapidKey });
+        if (token) await pushLifecycle.bind(generation, token, 'web');
       }
-    }
+    }).catch(error => console.warn('No se pudo habilitar push:', error));
+    return registrationTask;
   },
 
-  async schedule(title: string, body: string, id: number = new Date().getTime(), scheduleAt?: Date) {
+  stopPushNotifications() {
+    pushLifecycle.stop();
+    void registrationTask.then(removePushListeners);
+  },
+
+  async unregisterPushNotifications(userId: string) {
+    pushLifecycle.stop();
+    await registrationTask;
+    await removePushListeners();
+    let token: string | undefined;
+    const cached = localStorage.getItem(bindingKey);
+    if (cached) {
+      try { const binding = JSON.parse(cached); if (binding.userId === userId) token = binding.token; }
+      catch { localStorage.removeItem(bindingKey); }
+    }
+    await pushLifecycle.unlink(token);
+    localStorage.removeItem(bindingKey);
+    expirationUser = null;
+    if (reminderInterval) clearInterval(reminderInterval);
+    reminderInterval = undefined;
+    await this.clearAll();
+    if (Capacitor.isNativePlatform()) await PushNotifications.removeAllDeliveredNotifications();
+  },
+
+  async schedule(title: string, body: string, id: number = nextNotificationId(), scheduleAt?: Date) {
     try {
       const hasPermission = await this.requestPermissions();
       if (!hasPermission) return;
 
+      if (!Capacitor.isNativePlatform()) {
+        if (!scheduleAt && 'Notification' in window && Notification.permission === 'granted') new Notification(title, { body });
+        return;
+      }
       await LocalNotifications.schedule({
         notifications: [
           {
@@ -185,16 +146,17 @@ export const notificationService = {
 
       // Web Fallback for Desktop Notifications (only in non-native browser)
       if (!Capacitor.isNativePlatform() && typeof window !== 'undefined' && 'Notification' in window) {
-        if ((window as any).webReminderInterval) clearInterval((window as any).webReminderInterval);
+        if (reminderInterval) clearInterval(reminderInterval);
         
         if (times.length > 0) {
-          (window as any).webReminderInterval = setInterval(() => {
+          reminderInterval = setInterval(() => {
             const now = new Date();
             const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
             
+            const reminderKey = new Date().toLocaleDateString('en-CA') + ':' + currentTime;
             const lastNotified = localStorage.getItem('last_study_reminder');
-            if (times.includes(currentTime) && lastNotified !== currentTime) {
-               localStorage.setItem('last_study_reminder', currentTime);
+            if (times.includes(currentTime) && lastNotified !== reminderKey) {
+               localStorage.setItem('last_study_reminder', reminderKey);
                if (Notification.permission === 'granted') {
                  new Notification('📚 ¡Hora de Estudiar!', {
                    body: 'Es momento de avanzar en tus metas del plan de estudio. ¡Tu disciplina creará tu éxito! 🚀'
@@ -212,13 +174,14 @@ export const notificationService = {
                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
                    osc.start(ctx.currentTime);
                    osc.stop(ctx.currentTime + 0.5);
-                 } catch(e) {}
+                 } catch { /* El aviso visual ya se mostró; el audio es opcional. */ }
                }
             }
           }, 15000); // Check every 15 seconds
         }
       }
 
+      if (!Capacitor.isNativePlatform()) return;
       const pending = await LocalNotifications.getPending();
       const studyReminders = pending.notifications.filter(n => n.id >= 2000 && n.id <= 2999);
       if (studyReminders.length > 0) {
@@ -245,6 +208,7 @@ export const notificationService = {
 
   async cancelExpirationNotifications() {
     try {
+      if (!Capacitor.isNativePlatform()) return;
       const pending = await LocalNotifications.getPending();
       const expirationNotifs = pending.notifications.filter(n => n.id >= 1000 && n.id < 2000);
       if (expirationNotifs.length > 0) {
@@ -257,6 +221,7 @@ export const notificationService = {
 
   async clearAll() {
     try {
+      if (!Capacitor.isNativePlatform()) return;
       const pending = await LocalNotifications.getPending();
       if (pending.notifications.length > 0) {
         await LocalNotifications.cancel(pending);
@@ -284,7 +249,7 @@ export const notificationService = {
           title,
           message,
           is_read: false
-        });
+        }).throwOnError();
       }
     } catch (err) {
       console.error('Error inserting db notification:', err);
@@ -334,8 +299,8 @@ export const notificationService = {
     } else {
       // 2. Fetch current student's subscription
       // Use a lock to prevent strict mode from running this twice concurrently
-      if ((window as any)._hasCheckedExpirations) return;
-      (window as any)._hasCheckedExpirations = true;
+      if (expirationUser === userId) return;
+      expirationUser = userId;
       
       try {
         const { data: subscription, error } = await supabase

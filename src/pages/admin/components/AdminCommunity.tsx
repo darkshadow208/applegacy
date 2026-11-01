@@ -48,17 +48,19 @@ export function AdminCommunity({ showToast }: AdminCommunityProps) {
     if (!window.confirm('¿Seguro que quieres eliminar este aporte permanentemente?')) return;
     try {
       // 1. Obtener la URL del archivo para ver si está en el Storage de Supabase
-      const { data: contData } = await supabase
+      const { data: contData, error: contError } = await supabase
         .from('user_contributions')
         .select('link_url')
         .eq('id', contId)
         .single();
 
+      if (contError) throw contError;
       if (contData?.link_url && contData.link_url.includes('/storage/v1/object/public/avatars/')) {
         // Extraer la ruta relativa (ej: contributions/xxxx-xxxx.pdf)
         const filePath = contData.link_url.split('/storage/v1/object/public/avatars/')[1];
         if (filePath) {
-          await supabase.storage.from('avatars').remove([filePath]);
+          const { error: removeError } = await supabase.storage.from('avatars').remove([filePath]);
+          if (removeError) throw removeError;
         }
       }
 

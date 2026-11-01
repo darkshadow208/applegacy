@@ -66,6 +66,12 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
     return <Navigate to="/auth/login" state={{ from: location }} replace />;
   }
 
+  if (!profile) {
+    return <div className="p-8 text-center">No se pudo cargar tu perfil.
+      <button className="ml-3 underline" onClick={() => window.location.reload()}>Reintentar</button>
+    </div>;
+  }
+
   if ((profile?.status === 'pending' || profile?.status === 'suspended') && location.pathname !== '/auth/pending') {
     return <Navigate to="/auth/pending" replace />;
   }
@@ -78,34 +84,36 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
 }
 
 function App() {
-  const { initialize, session, profile } = useAuthStore();
+  const { initialize, session, profile, loading } = useAuthStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   useEffect(() => {
-    if (!useAuthStore.getState().loading) {
+    if (!loading) {
       SplashScreen.hide().catch(() => {});
     }
-  }, [useAuthStore.getState().loading]);
+  }, [loading]);
 
+  const pushUserId = session?.user.id;
+  const pushRole = profile?.role;
   useEffect(() => {
-    if (session?.user && profile) {
+    if (pushUserId && pushRole) {
       // 1. Check expiration notifications
-      notificationService.checkAndScheduleExpirationNotifications(session.user.id, profile.role);
+      notificationService.checkAndScheduleExpirationNotifications(pushUserId, pushRole);
 
       // Register Push Notifications
-      notificationService.registerPushNotifications(session.user.id);
+      notificationService.registerPushNotifications(pushUserId);
 
       // Fetch initial unread count
-      useNotificationStore.getState().fetchUnreadCount(session.user.id);
+      useNotificationStore.getState().fetchUnreadCount(pushUserId);
 
       // 2. We no longer sync all unread db notifications on startup to avoid spamming the user.
 
       // 3. Realtime subscription for new notifications
       const channel = supabase
-        .channel(`notifications-realtime-${session.user.id}`)
+        .channel(`notifications-realtime-${pushUserId}`)
         .on(
           'postgres_changes',
           {
@@ -116,9 +124,9 @@ function App() {
           async (payload) => {
             const newNotif = payload.new;
             // Filter if it's for this user or global
-            if (newNotif && (newNotif.user_id === null || newNotif.user_id === session.user.id)) {
-              const notifiedIdsKey = `notified_notification_ids_${session.user.id}`;
-              let notifiedIds: string[] = [];
+            if (newNotif && (newNotif.user_id === null || newNotif.user_id === pushUserId)) {
+              const notifiedIdsKey = `notified_notification_ids_${pushUserId}`;
+              let notifiedIds: string[];
               try {
                 notifiedIds = JSON.parse(localStorage.getItem(notifiedIdsKey) || '[]');
                 if (!Array.isArray(notifiedIds)) notifiedIds = [];
@@ -145,10 +153,11 @@ function App() {
 
       // Clean up subscription on unmount or session change
       return () => {
-        supabase.removeChannel(channel);
+        notificationService.stopPushNotifications();
+        void supabase.removeChannel(channel);
       };
     }
-  }, [session, profile]);
+  }, [pushUserId, pushRole]);
 
   return (
     <Router>

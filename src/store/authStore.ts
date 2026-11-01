@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { notificationService } from '../lib/notifications';
+import { useNotificationStore } from './notificationStore';
 import type { Session, User } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -69,12 +71,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.warn('Supabase auth signOut failed, clearing local session:', err);
-    } finally {
-      set({ session: null, user: null, profile: null });
-    }
+    const userId = useAuthStore.getState().user?.id;
+    // Desvincular con la sesión aún válida. Si falla, informar y permitir reintentar.
+    if (userId) await notificationService.unregisterPushNotifications(userId);
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    useNotificationStore.getState().resetUnread();
+    localStorage.removeItem('cached_courses');
+    localStorage.removeItem('cached_bonuses');
+    set({ session: null, user: null, profile: null, loading: false });
   }
 }));

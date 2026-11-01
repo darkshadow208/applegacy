@@ -8,11 +8,10 @@ export function PendingApproval() {
   const handleSignOut = async () => {
     try {
       await signOut();
-    } catch (err) {
-      console.warn('Sign out failed, performing fallback redirect:', err);
-    } finally {
-      // Forzar una redirección limpia recargando el estado del navegador
       window.location.href = '/auth/login';
+    } catch (error) {
+      alert('No se pudo cerrar la sesión de forma segura. Revisa tu conexión y vuelve a intentarlo.');
+      console.error(error);
     }
   };
 

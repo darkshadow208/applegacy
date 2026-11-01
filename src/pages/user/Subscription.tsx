@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { errorMessage } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { Calendar, Upload, CheckCircle, Clock, XCircle, FileText, Loader2 } from 'lucide-react';
 
@@ -11,6 +12,7 @@ export function Subscription() {
   const [subscription, setSubscription] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Formulario pago
   const [showForm, setShowForm] = useState(false);
@@ -28,22 +30,25 @@ export function Subscription() {
       if (!user) return;
       try {
         // Fetch subscription safely
-        const { data: subData } = await supabase
+        const { data: subData, error: subError } = await supabase
           .from('subscriptions')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
+        if (subError) throw subError;
         if (subData) setSubscription(subData);
 
         // Fetch payments
-        const { data: payData } = await supabase
+        const { data: payData, error: payError } = await supabase
           .from('payments')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
+        if (payError) throw payError;
         if (payData) setPayments(payData);
 
       } catch (err) {
+        setLoadError(errorMessage(err));
         console.error(err);
       } finally {
         setLoading(false);
@@ -68,7 +73,7 @@ export function Subscription() {
 
     try {
       setUploading(true);
-      const filePath = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
 
       // Upload file
       const { error: uploadError } = await supabase.storage
@@ -77,7 +82,6 @@ export function Subscription() {
       
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage.from('payment_receipts').getPublicUrl(filePath);
 
       // Save to database
       const { data: newPayment, error: dbError } = await supabase
@@ -86,26 +90,17 @@ export function Subscription() {
           user_id: user.id,
           amount: parseFloat(amount),
           payment_date: paymentDate,
-          receipt_url: publicUrl,
+          receipt_url: filePath,
           notes,
-          status: 'pending'
+          status: 'pending',
+          purpose: 'renewal'
         })
         .select()
         .single();
       
       if (dbError) throw dbError;
 
-      // Guardar también el comprobante en la suscripción y cambiar estado a pending_renewal si estaba expirada
-      await supabase
-        .from('subscriptions')
-        .update({ 
-          status: 'pending_renewal', 
-          payment_receipt_url: publicUrl 
-        })
-        .eq('user_id', user.id);
-
-      // Update UI
-      setSubscription({ ...subscription, status: 'pending_renewal', payment_receipt_url: publicUrl });
+      // Una solicitud pendiente conserva todos los días ya aprobados.
       setPayments([newPayment, ...payments]);
       setShowForm(false);
       setSuccessMsg('Comprobante enviado con éxito. Un administrador lo revisará pronto.');
@@ -114,7 +109,7 @@ export function Subscription() {
       // Reset form
       setAmount(''); setPaymentDate(''); setNotes(''); setFile(null);
     } catch (err: any) {
-      alert('Error al subir comprobante. ¿Ejecutaste el script SQL de buckets? Error: ' + err.message);
+      alert('No se pudo enviar el comprobante: ' + err.message);
     } finally {
       setUploading(false);
     }
@@ -146,6 +141,7 @@ export function Subscription() {
         <p className="text-gray-500 text-sm">Gestiona tu suscripción y pagos.</p>
       </div>
 
+      {loadError && <p role="alert" className="text-red-700">{loadError}</p>}
       {/* Tabs */}
       <div className="flex bg-gray-200/50 p-1 rounded-2xl w-max shadow-inner">
         <button 

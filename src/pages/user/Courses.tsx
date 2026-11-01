@@ -1,17 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, PlayCircle, ChevronLeft, ChevronRight, Sparkles, Loader2 } from 'lucide-react';
+import { errorMessage } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
-
-// Datos de prueba como fallback para no romper la app si la DB está vacía
-const mockCourses = [
-  { id: '3', title: 'De Cero a Criptoinversor', description: 'Entiende blockchain y criptomonedas.', category: 'Inversiones', image: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=800', color: 'bg-emerald-500', created_at: '2026-05-03T10:00:00Z' },
-  { id: '2', title: 'Hábitos de Alta Productividad', description: 'Cómo organizar tu día para lograr más.', category: 'Desarrollo Personal', image: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?q=80&w=800', color: 'bg-purple-500', created_at: '2026-05-02T10:00:00Z' },
-  { id: '1', title: 'Masterclass en Estrategia Digital', description: 'Aprende a crear embudos de venta.', category: 'Marketing Digital', image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800', color: 'bg-blue-500', created_at: '2026-05-01T10:00:00Z' },
-  { id: '4', title: 'Gestión de Equipos Remotos', description: 'Lidera equipos a distancia con éxito.', category: 'Negocios', image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=800', color: 'bg-orange-500', created_at: '2026-04-30T10:00:00Z' },
-  { id: '5', title: 'Psicología de Ventas', description: 'Vende más sin parecer que estás vendiendo.', category: 'Marketing Digital', image: 'https://images.unsplash.com/photo-1556761175-4b46a572b786?q=80&w=800', color: 'bg-blue-500', created_at: '2026-04-29T10:00:00Z' },
-  { id: '6', title: 'Bolsa de Valores para Novatos', description: 'Tu primera inversión en acciones.', category: 'Inversiones', image: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=800', color: 'bg-emerald-500', created_at: '2026-04-28T10:00:00Z' },
-];
 
 const categories = ['Todos', 'Marketing Digital', 'Desarrollo Personal', 'Inversiones', 'Negocios'];
 const COURSES_PER_PAGE = 3;
@@ -24,68 +15,25 @@ export function Courses() {
   const [currentPage, setCurrentPage] = useState(1);
   const [onlyLastTen, setOnlyLastTen] = useState(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
-    // 1. Cargar caché inmediatamente para UI Optimista
-    const cached = localStorage.getItem('cached_courses');
-    if (cached) {
-      try {
-        setCourses(JSON.parse(cached));
-        setLoading(false);
-      } catch (err) {
-        console.warn('Error al parsear cursos en caché:', err);
-      }
-    }
-
+    let active = true;
+    localStorage.removeItem('cached_courses');
     async function fetchCourses() {
-      // Timeout de seguridad de 4 segundos
-      const timeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 4000);
-      });
-
       try {
-        const queryPromise = supabase
-          .from('courses')
-          .select(`
-            id,
-            title,
-            description,
-            image_url,
-            is_active,
-            created_at,
-            course_categories (name)
-          `)
-          .eq('is_active', true);
-
-        // Competencia de promesas
-        const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-
-        if (!error && data && data.length > 0) {
-          const mapped = data.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            description: item.description,
-            category: item.course_categories?.name || 'Todos',
-            image: item.image_url || 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800',
-            color: 'bg-blue-500', // Default color, fallback
-            created_at: item.created_at
-          }));
-          setCourses(mapped);
-          localStorage.setItem('cached_courses', JSON.stringify(mapped));
-        } else if (!cached) {
-          // Solo usar mocks si no hay absolutamente nada en caché
-          setCourses(mockCourses);
-          localStorage.setItem('cached_courses', JSON.stringify(mockCourses));
-        }
-      } catch (err) {
-        if (!cached) {
-          setCourses(mockCourses);
-          localStorage.setItem('cached_courses', JSON.stringify(mockCourses));
-        }
-      } finally {
-        setLoading(false);
-      }
+        const { data } = await supabase.from('courses')
+          .select('id, title, description, image_url, created_at, course_categories(name)')
+          .eq('is_active', true).throwOnError();
+        if (active) setCourses((data || []).map(item => ({ ...item,
+          category: (Array.isArray(item.course_categories) ? item.course_categories[0] : item.course_categories)?.name || 'Todos',
+          image: item.image_url || 'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=800',
+          color: 'bg-blue-500'
+        })));
+      } catch (error) { if (active) { setCourses([]); setLoadError(errorMessage(error)); } }
+      finally { if (active) setLoading(false); }
     }
-    fetchCourses();
+    void fetchCourses();
+    return () => { active = false; };
   }, []);
 
   // 1. ORDENAR MAS RECIENTES PRIMERO
@@ -127,6 +75,7 @@ export function Courses() {
   return (
     <div className="flex flex-col gap-6 animate-fade-in pb-20">
       
+      {loadError && <p role="alert" className="text-red-700">{loadError}</p>}
       {/* Header */}
       <div className="flex flex-col gap-1">
         <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Catálogo</h2>

@@ -45,12 +45,7 @@ export function AdminComms({ showToast }: AdminCommsProps) {
       });
       if (error) throw error;
 
-      await supabase.from('notifications').insert({
-        user_id: null,
-        title: '⚠️ Nuevo Aviso Global',
-        message: announcementText.length > 50 ? announcementText.substring(0, 47) + '...' : announcementText,
-        is_read: false
-      });
+      // El trigger publica el aviso en la misma transacción.
 
       showToast('Aviso Global Publicado', 'success');
       setAnnouncementText('');
@@ -65,7 +60,7 @@ export function AdminComms({ showToast }: AdminCommsProps) {
 
   const handleRemoveAnnouncement = async (annId: string) => {
     try {
-      const { error } = await supabase.from('news_posts').delete().eq('id', annId);
+      const { error } = await supabase.from('news_posts').delete().eq('id', annId).select('id').single();
       if (error) throw error;
       showToast('Aviso eliminado', 'success');
       fetchAnnouncements();
@@ -90,12 +85,7 @@ export function AdminComms({ showToast }: AdminCommsProps) {
       });
       if (error) throw error;
 
-      await supabase.from('notifications').insert({
-        user_id: null,
-        title: '📝 Nuevo artículo en el Blog',
-        message: `Acabamos de publicar: "${blogTitle}". ¡Ve a leerlo!`,
-        is_read: false
-      });
+      // El trigger publica el aviso en la misma transacción.
 
       showToast('Artículo de Blog Publicado', 'success');
       setBlogTitle('');
