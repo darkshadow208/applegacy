@@ -38,8 +38,20 @@ export function Register() {
     setError('');
 
     try {
+      // 0. Si hay una sesión previa o residual, limpiarla para evitar conflictos con la subida del comprobante
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      if (existingSession) {
+        await supabase.auth.signOut().catch(() => {});
+      }
+
       // 1. Upload receipt
-      const filePath = `registration/${crypto.randomUUID()}.${fileExt}`;
+      const uuid = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          });
+      const filePath = `registration/${uuid}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('payment_receipts')
@@ -50,9 +62,7 @@ export function Register() {
 
       if (uploadError) throw uploadError;
 
-      // La ruta es privada. El administrador abrirá un enlace temporal.
-
-      // 3. Sign up the user
+      // 2. Sign up the user
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -72,7 +82,13 @@ export function Register() {
       // User created
       navigate('/auth/pending');
     } catch (err: any) {
-      setError(err.message || 'Error al registrarse. Intenta de nuevo.');
+      let msg = err.message || 'Error al registrarse. Intenta de nuevo.';
+      if (typeof msg === 'string' && msg.toLowerCase().includes('row-level security')) {
+        msg = 'Error de permisos al subir el comprobante. Por favor intenta de nuevo.';
+      } else if (typeof msg === 'string' && msg.toLowerCase().includes('already registered')) {
+        msg = 'Este correo ya está registrado. Inicia sesión con tus datos o recupera tu contraseña.';
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }

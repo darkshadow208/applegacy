@@ -148,7 +148,7 @@ DROP POLICY IF EXISTS receipts_upload_guard ON storage.objects;
 CREATE POLICY receipts_upload_guard ON storage.objects AS RESTRICTIVE FOR INSERT TO public
 WITH CHECK (bucket_id <> 'payment_receipts' OR (
   lower(storage.extension(name)) IN ('jpg','jpeg','png','webp','pdf') AND
-  ((auth.uid() IS NULL AND name ~ '^registration/[0-9a-f-]{36}\.[a-z]+$') OR
+  (name ~ '^registration/[0-9a-f-]{36}\.[a-z]+$' OR
    (auth.uid() IS NOT NULL AND split_part(name, '/', 1) = auth.uid()::text))
 ));
 DROP POLICY IF EXISTS receipts_upload ON storage.objects;
