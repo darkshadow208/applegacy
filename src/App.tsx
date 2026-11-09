@@ -160,7 +160,7 @@ function App() {
   }, [pushUserId, pushRole]);
 
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL}>
       <div className="min-h-screen font-sans">
         <Routes>
           <Route path="/auth" element={<AuthLayout />}>

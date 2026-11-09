@@ -1,14 +1,16 @@
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { LogOut, ShieldAlert } from 'lucide-react';
 
 export function PendingApproval() {
   const { signOut, profile } = useAuthStore();
+  const navigate = useNavigate();
   const isSuspended = profile?.status === 'suspended';
 
   const handleSignOut = async () => {
     try {
       await signOut();
-      window.location.href = '/auth/login';
+      navigate('/auth/login', { replace: true });
     } catch (error) {
       alert('No se pudo cerrar la sesión de forma segura. Revisa tu conexión y vuelve a intentarlo.');
       console.error(error);
